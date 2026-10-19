@@ -1,0 +1,9 @@
+{
+  "key.categories.classeshardcore.classes": "Classes Hardcore",
+  "key.classeshardcore.activate": "Activate ability",
+  "key.classeshardcore.activate_secondary": "Activate secondary ability",
+  "key.classeshardcore.open_menu": "Open ClassesHardcore config",
+  "classeshardcore.config.title": "Classes Hardcore — Configuration",
+  "classeshardcore.config.icon_size": "Icon size: %s px",
+  "item.classeshardcore.class_token": "Class Token"
+}

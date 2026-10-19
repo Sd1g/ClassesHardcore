@@ -1,0 +1,9 @@
+{
+  "key.categories.classeshardcore.classes": "Классы Hardcore",
+  "key.classeshardcore.activate": "Активировать способность",
+  "key.classeshardcore.activate_secondary": "Активировать вторую способность",
+  "key.classeshardcore.open_menu": "Открыть настройки ClassesHardcore",
+  "classeshardcore.config.title": "Classes Hardcore — Настройки",
+  "classeshardcore.config.icon_size": "Размер иконок: %s px",
+  "item.classeshardcore.class_token": "Токен класса"
+}

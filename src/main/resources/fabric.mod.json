@@ -1,0 +1,29 @@
+{
+	"schemaVersion": 1,
+	"id": "classeshardcore",
+	"version": "${version}",
+	"name": "ClassesHardcore",
+	"description": "Adds hardcore classes with unique abilities.",
+	"authors": ["Me!"],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/classeshardcore/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["net.sd1g.classes.ClassesHardcore"],
+		"client": ["net.sd1g.classes.client.ClassesHardcoreClient"],
+		"fabric-datagen": ["net.sd1g.classes.client.ClassesHardcoreDataGenerator"]
+	},
+	"mixins": [
+		"classeshardcore.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
