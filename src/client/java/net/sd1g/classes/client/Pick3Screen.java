@@ -1,5 +1,6 @@
 package net.sd1g.classes.client;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -9,13 +10,13 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.network.RequestClassChangePayload;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,12 +27,15 @@ public class Pick3Screen extends Screen {
     private ClassDefinition selectedClass = null;
     private boolean viewingCurrentClass = false;
 
-    // Для предупреждения
     private boolean showCancelWarning = false;
     private Button selectButton;
     private Button cancelButton;
     private Button warningYesButton;
     private Button warningNoButton;
+
+    // Кэш текста
+    private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
+    private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
     private int leftPanelWidth;
     private int rightPanelWidth;
@@ -65,9 +69,9 @@ public class Pick3Screen extends Screen {
         this.itemWidth = leftPanelWidth - PADDING * 4;
 
         if (selectedClass == null && !options.isEmpty()) {
-            // ИСПРАВЛЕНИЕ: options.getFirst() вместо options.get(0)
             selectedClass = ClassRegistry.get(options.getFirst());
             viewingCurrentClass = false;
+            updateCachedText();
         }
 
         int buttonY = this.height - 30;
@@ -93,7 +97,6 @@ public class Pick3Screen extends Screen {
         ).bounds(rightPanelX, buttonY, buttonWidth, 24).build();
         this.addRenderableWidget(this.cancelButton);
 
-        // Кнопки для всплывающего окна
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int warnBtnWidth = 120;
@@ -115,6 +118,15 @@ public class Pick3Screen extends Screen {
         this.addRenderableWidget(this.warningNoButton);
 
         updateWarningButtons();
+    }
+
+    private void updateCachedText() {
+        if (selectedClass == null) return;
+        cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
+        cachedAbilityLines.clear();
+        for (Ability ability : selectedClass.abilities) {
+            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32));
+        }
     }
 
     private void updateWarningButtons() {
@@ -143,7 +155,6 @@ public class Pick3Screen extends Screen {
             this.selectButton.active = !viewingCurrentClass && !showCancelWarning;
         }
 
-        // Отрисовка предупреждения
         if (showCancelWarning) {
             gfx.fill(0, 0, this.width, this.height, 0xBB000000);
 
@@ -153,7 +164,6 @@ public class Pick3Screen extends Screen {
             int y = (this.height - h) / 2;
             drawBeveledPanel(gfx, x, y, w, h, 0xEE1A1A1A);
 
-            // ИСПРАВЛЕНИЕ: Убран параметр boolean (true) из centeredText
             gfx.centeredText(this.font, "§l§cВнимание!", this.width / 2, y + 15, 0xFFFFFFFF);
             gfx.centeredText(this.font, "Вы уверены, что хотите выйти?", this.width / 2, y + 35, 0xFFCCCCCC);
             gfx.centeredText(this.font, "Ваш токен будет потрачен впустую.", this.width / 2, y + 50, 0xFFFF5555);
@@ -241,8 +251,7 @@ public class Pick3Screen extends Screen {
 
         int textY = contentY + ICON_SIZE + 15;
 
-        List<net.minecraft.util.FormattedCharSequence> descLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
-        for (net.minecraft.util.FormattedCharSequence line : descLines) {
+        for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
             textY += 10;
         }
@@ -251,13 +260,13 @@ public class Pick3Screen extends Screen {
         gfx.text(this.font, "§lСпособности:", contentX, textY, 0xFFFFAA00, true);
         textY += 15;
 
-        for (Ability ability : selectedClass.abilities) {
+        for (int i = 0; i < selectedClass.abilities.size(); i++) {
+            Ability ability = selectedClass.abilities.get(i);
             drawIcon(gfx, ability.getIcon(), contentX, textY, 16);
             gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 22, textY + 4, 0xFFFFFFFF, true);
 
-            List<net.minecraft.util.FormattedCharSequence> abiDesc = this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32);
             int abiY = textY + 16;
-            for (net.minecraft.util.FormattedCharSequence line : abiDesc) {
+            for (FormattedCharSequence line : cachedAbilityLines.get(i)) {
                 gfx.text(this.font, line, contentX + 22, abiY, 0xFF888888, true);
                 abiY += 10;
             }
@@ -299,8 +308,12 @@ public class Pick3Screen extends Screen {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    BufferedImage img = ImageIO.read(stream);
-                    return img == null ? new int[]{32, 32} : new int[]{img.getWidth(), img.getHeight()};
+                    // ИСПОЛЬЗУЕМ NativeImage
+                    NativeImage img = NativeImage.read(stream);
+                    int w = img.getWidth();
+                    int h = img.getHeight();
+                    img.close();
+                    return new int[]{w, h};
                 }
             } catch (Exception e) { return new int[]{32, 32}; }
         });
@@ -322,8 +335,12 @@ public class Pick3Screen extends Screen {
             for (int i = 0; i < options.size(); i++) {
                 int y = startY + i * (ITEM_HEIGHT + ITEM_SPACING);
                 if (mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
-                    selectedClass = ClassRegistry.get(options.get(i));
-                    viewingCurrentClass = false;
+                    ClassDefinition newDef = ClassRegistry.get(options.get(i));
+                    if (selectedClass != newDef || viewingCurrentClass) {
+                        selectedClass = newDef;
+                        viewingCurrentClass = false;
+                        updateCachedText();
+                    }
                     return true;
                 }
             }
@@ -331,8 +348,11 @@ public class Pick3Screen extends Screen {
             int currentY = startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20;
             ClassDefinition currentDef = ClassRegistry.get(ClassesHardcoreClient.currentClass);
             if (currentDef != null && mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= currentY && mouseY <= currentY + ITEM_HEIGHT) {
-                selectedClass = currentDef;
-                viewingCurrentClass = true;
+                if (selectedClass != currentDef || !viewingCurrentClass) {
+                    selectedClass = currentDef;
+                    viewingCurrentClass = true;
+                    updateCachedText();
+                }
                 return true;
             }
         }

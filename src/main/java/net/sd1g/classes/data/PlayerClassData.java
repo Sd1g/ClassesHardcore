@@ -43,6 +43,7 @@ public class PlayerClassData {
     // --- Каскадер ---
     public boolean climbingActive = false;
     public boolean climbingInProgress = false;
+    public int stuntmanClimbedBlocks = 0;
 
     // --- Герой ---
     public int heroTrades = 0;
@@ -51,6 +52,17 @@ public class PlayerClassData {
     // --- Токены смены класса ---
     public int randomChangeTokens = 0;
     public int pick3ChangeTokens = 0;
+
+    // --- НОВЫЕ СЧЕТЧИКИ ДЛЯ РЕБАЛАНСА ---
+    public int warriorSwordKills = 0;
+    public int teleporterCount = 0;
+    public int porcupineHitsTaken = 0;
+    public int archerBowKills = 0;
+    public int dodgerDodgeCount = 0;
+
+    // --- Кристаллы Энда (Игровые тики) ---
+    public int endCrystalUses = 0;
+    public long crystalCooldownEndTick = 0; // Храним тик, когда КД закончится
 
     public static PlayerClassData get(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
@@ -116,10 +128,20 @@ public class PlayerClassData {
         tag.putBoolean("bruteShakeArmed", bruteShakeArmed);
         tag.putBoolean("climbingActive", climbingActive);
         tag.putBoolean("climbingInProgress", climbingInProgress);
+        tag.putInt("stuntmanClimbedBlocks", stuntmanClimbedBlocks);
         tag.putInt("heroTrades", heroTrades);
         tag.putInt("heroTradeBaseline", heroTradeBaseline);
         tag.putInt("randomChangeTokens", randomChangeTokens);
         tag.putInt("pick3ChangeTokens", pick3ChangeTokens);
+
+        tag.putInt("warriorSwordKills", warriorSwordKills);
+        tag.putInt("teleporterCount", teleporterCount);
+        tag.putInt("porcupineHitsTaken", porcupineHitsTaken);
+        tag.putInt("archerBowKills", archerBowKills);
+        tag.putInt("dodgerDodgeCount", dodgerDodgeCount);
+        tag.putInt("endCrystalUses", endCrystalUses);
+        tag.putLong("crystalCooldownEndTick", crystalCooldownEndTick);
+
         return tag;
     }
 
@@ -144,10 +166,20 @@ public class PlayerClassData {
         data.bruteShakeArmed = tag.getBooleanOr("bruteShakeArmed", false);
         data.climbingActive = tag.getBooleanOr("climbingActive", false);
         data.climbingInProgress = tag.getBooleanOr("climbingInProgress", false);
+        data.stuntmanClimbedBlocks = tag.getIntOr("stuntmanClimbedBlocks", 0);
         data.heroTrades = tag.getIntOr("heroTrades", 0);
         data.heroTradeBaseline = tag.getIntOr("heroTradeBaseline", 0);
         data.randomChangeTokens = tag.getIntOr("randomChangeTokens", 0);
         data.pick3ChangeTokens = tag.getIntOr("pick3ChangeTokens", 0);
+
+        data.warriorSwordKills = tag.getIntOr("warriorSwordKills", 0);
+        data.teleporterCount = tag.getIntOr("teleporterCount", 0);
+        data.porcupineHitsTaken = tag.getIntOr("porcupineHitsTaken", 0);
+        data.archerBowKills = tag.getIntOr("archerBowKills", 0);
+        data.dodgerDodgeCount = tag.getIntOr("dodgerDodgeCount", 0);
+        data.endCrystalUses = tag.getIntOr("endCrystalUses", 0);
+        data.crystalCooldownEndTick = tag.getLongOr("crystalCooldownEndTick", 0);
+
         return data;
     }
 }

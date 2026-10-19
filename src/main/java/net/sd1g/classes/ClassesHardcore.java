@@ -67,6 +67,7 @@ public class ClassesHardcore implements ModInitializer {
             if (now % 200 == 0) TntOwnerTracker.cleanupOld(now);
         });
 
+        // === Обработчик клика блоков (TNT и Кристаллы) ===
         UseBlockCallback.EVENT.register((player, level, hand, hitResult) -> {
             if (!(player instanceof ServerPlayer sp)) return InteractionResult.PASS;
             if (level.isClientSide()) return InteractionResult.PASS;
@@ -76,11 +77,38 @@ public class ClassesHardcore implements ModInitializer {
             BlockPos clickedPos = hitResult.getBlockPos();
             long tick = level.getServer() != null ? level.getServer().getTickCount() : 0;
 
+            // --- Кристаллы Энда ---
+            if (held.is(Items.END_CRYSTAL)) {
+                PlayerClassData data = PlayerClassData.get(sp);
+                long gameTime = level.getGameTime();
+
+                // Если КД еще не прошло, показываем уведомление над хотбаром и отменяем установку
+                if (gameTime < data.crystalCooldownEndTick) {
+                    long remainingTicks = data.crystalCooldownEndTick - gameTime;
+                    long seconds = (remainingTicks / 20) + 1;
+                    sp.sendOverlayMessage(Component.literal("§cКристаллы на перезарядке! §f" + seconds + " сек."));
+                    return InteractionResult.FAIL;
+                }
+
+                data.endCrystalUses++;
+                PlayerClassData.markDirty(sp);
+
+                if (data.endCrystalUses >= 3) {
+                    data.endCrystalUses = 0;
+                    data.crystalCooldownEndTick = gameTime + 1800; // 90 секунд
+
+                    // Показываем уведомление над хотбаром
+                    sp.sendOverlayMessage(Component.literal("§eЛимит кристаллов исчерпан. КД 90 сек."));
+                    // Отправляем на клиент для отрисовки HUD (таймер над иконками)
+                    ServerPlayNetworking.send(sp, new CooldownSyncPayload("end_crystal", 1800));
+                }
+            }
+
+            // --- Логика TNT ---
             boolean isIgniter = held.is(Items.FLINT_AND_STEEL) || held.is(Items.FIRE_CHARGE);
             if (isIgniter) {
                 boolean tntNearby = false;
-                for (BlockPos p : BlockPos.betweenClosed(
-                        clickedPos.offset(-1, -1, -1), clickedPos.offset(1, 1, 1))) {
+                for (BlockPos p : BlockPos.betweenClosed(clickedPos.offset(-1, -1, -1), clickedPos.offset(1, 1, 1))) {
                     if (level.getBlockState(p).is(Blocks.TNT)) {
                         tntNearby = true;
                         break;
@@ -118,7 +146,6 @@ public class ClassesHardcore implements ModInitializer {
             if ("ice_strike".equals(data.playerClass)) {
                 data.setPlayerClass("ice_warrior");
                 PlayerClassData.markDirty(player);
-                LOGGER.info("Migrated class ice_strike → ice_warrior for {}", player.getName().getString());
             }
             if ("spearman".equals(data.playerClass)) {
                 data.playerClass = "none";
@@ -131,7 +158,6 @@ public class ClassesHardcore implements ModInitializer {
                     String randomClass = classes[new Random().nextInt(classes.length)];
                     data.setPlayerClass(randomClass);
                     PlayerClassData.markDirty(player);
-                    LOGGER.info("Assigned random class '{}' to player {}", randomClass, player.getName().getString());
                 }
             } else {
                 data.setPlayerClass(data.playerClass);
@@ -151,6 +177,13 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(player, new AssassinSyncPayload(data.assassinBonusDamage));
             ServerPlayNetworking.send(player, new HeroSyncPayload(data.heroTrades));
             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+
+            // Восстанавливаем таймер кристаллов при входе, если он активен
+            long gameTime = player.level().getGameTime();
+            if (data.crystalCooldownEndTick > gameTime) {
+                long remaining = data.crystalCooldownEndTick - gameTime;
+                ServerPlayNetworking.send(player, new CooldownSyncPayload("end_crystal", (int) remaining));
+            }
 
             if ("lucky_digger".equals(data.playerClass)) {
                 ServerPlayNetworking.send(player, new LuckyDiggerSyncPayload(
@@ -190,17 +223,14 @@ public class ClassesHardcore implements ModInitializer {
 
             int perLevel = ModConfig.getInstance().getIntEffect("mining_mastery_blocks_per_level", 200);
             int maxLevel = ModConfig.getInstance().getIntEffect("mining_mastery_max_level", 4);
-            int newLevel = perLevel > 0
-                    ? Math.min(data.luckyDiggerTotalOre / perLevel, maxLevel)
-                    : 0;
+            int newLevel = perLevel > 0 ? Math.min(data.luckyDiggerTotalOre / perLevel, maxLevel) : 0;
 
             boolean leveledUp = newLevel > data.luckyDiggerLevel;
             data.luckyDiggerLevel = newLevel;
             PlayerClassData.markDirty(serverPlayer);
 
             if (leveledUp) {
-                serverPlayer.sendOverlayMessage(Component.literal(
-                        "§aМастерство шахтёра. §fУровень " + newLevel + "."));
+                serverPlayer.sendOverlayMessage(Component.literal("§aМастерство шахтёра. §fУровень " + newLevel + "."));
             }
 
             ServerPlayNetworking.send(serverPlayer, new LuckyDiggerSyncPayload(
@@ -235,10 +265,14 @@ public class ClassesHardcore implements ModInitializer {
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             if (!(source.getEntity() instanceof ServerPlayer attacker)) return;
-
             PlayerClassData data = PlayerClassData.get(attacker);
-            if (!"mad_farmer".equals(data.playerClass)) return;
 
+            if ("warrior".equals(data.playerClass) && attacker.getMainHandItem().is(ItemTags.SWORDS)) {
+                data.warriorSwordKills++;
+                PlayerClassData.markDirty(attacker);
+            }
+
+            if (!"mad_farmer".equals(data.playerClass)) return;
             ItemStack weapon = attacker.getMainHandItem();
             if (!weapon.is(ItemTags.HOES)) return;
 
@@ -266,6 +300,8 @@ public class ClassesHardcore implements ModInitializer {
             if (sp.getRandom().nextDouble() >= chance) return true;
 
             DodgerAbility.playDodgeEffect(sp);
+            data.dodgerDodgeCount++;
+            PlayerClassData.markDirty(sp);
 
             if (amount >= 2.0f) {
                 sp.sendOverlayMessage(Component.literal("§bУклонение!§f Урон от атаки избежан."));
@@ -282,10 +318,8 @@ public class ClassesHardcore implements ModInitializer {
     }
 
     private static boolean isRedstoneComponentBlock(Block block) {
-        if (block == Blocks.REDSTONE_TORCH
-                || block == Blocks.REDSTONE_WALL_TORCH
-                || block == Blocks.LEVER
-                || block == Blocks.REDSTONE_BLOCK) {
+        if (block == Blocks.REDSTONE_TORCH || block == Blocks.REDSTONE_WALL_TORCH
+                || block == Blocks.LEVER || block == Blocks.REDSTONE_BLOCK) {
             return true;
         }
         var state = block.defaultBlockState();
@@ -294,210 +328,35 @@ public class ClassesHardcore implements ModInitializer {
 
     private void registerClasses() {
         ClassRegistry.register(new ClassDefinition("warrior", "Воин",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int amount = (int) cfg.getEffect("heal_amount", 2.0);
-                    int cdSec = cfg.getCooldown("heal", 440) / 20;
-                    return "Мастер ближнего боя. Исцеление (" + amount + " HP, кулдаун " + cdSec
-                            + " сек). Постоянно ускорен.";
-                },
-                List.of(new HealAbility(), new SpeedBoostAbility())));
+                () -> "Универсальный боец с исцелением и быстрыми атаками.",
+                List.of(new HealAbility(), new SpeedBoostAbility(), new CombatExperienceAbility(), new CombatTempoAbility())));
 
         ClassRegistry.register(new ClassDefinition("strongman", "Силач",
-                "Чем выше уровень опыта — тем сильнее удары в ближнем бою.",
+                "Усиливает удары по мере накопления опыта.",
                 List.of(new PowerGainAbility())));
 
         ClassRegistry.register(new ClassDefinition("lucky_digger", "Удачливый копатель",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int perLevel = cfg.getIntEffect("mining_mastery_blocks_per_level", 200);
-                    int maxLevel = cfg.getIntEffect("mining_mastery_max_level", 4);
-                    int cdSec = cfg.getCooldown("toggle_bonus", 600) / 20;
-                    return "Прокачивает кирки (" + perLevel + " руды = +1 уровень, макс. " + maxLevel
-                            + "). Переключает бонус: Эффективность / Удача (кулдаун " + cdSec + " сек).";
-                },
-                List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility())));
+                "Ускоренная добыча и контроль противников.",
+                List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility(), new LuckyDiggerSuppressionAbility(), new LuckyDiggerHeavyStrikeAbility())));
 
-        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int min = (int) cfg.getEffect("teleport_min_distance", 3.0);
-                    int max = (int) cfg.getEffect("teleport_max_distance", 30.0);
-                    int chance = (int) Math.round(cfg.getEffect("teleport_success_chance", 0.30) * 100);
-                    return "Мгновенно переносится на " + min + "–" + max + " блоков. Шанс " + chance + "%. КД зависит от дистанции.";
-                },
-                List.of(new TeleporterAbility(), new TeleporterLastChanceAbility())));
-
-        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int depCd = cfg.getCooldown("depletion", 1000) / 20;
-                    int satCd = cfg.getCooldown("satiate", 600) / 20;
-                    return "Истощение (Голод V, кулдаун " + depCd + " сек), "
-                            + "Утоление (кулдаун " + satCd + " сек). Чревоугодие: шанс Голода III.";
-                },
-                List.of(
-                        new GluttonyDepletionAbility(),
-                        new GluttonySatiateAbility(),
-                        new GluttonyAbility(),
-                        new GluttonyCravingsAbility()
-                )));
-
-        ClassRegistry.register(new ClassDefinition("spry", "Живчик",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int bonus = cfg.getIntEffect("vitality_bonus_hp", 10);
-                    return "Повышенное здоровье (" + (20 + bonus) + " HP). Растёт с уровнем опыта. "
-                            + "Второе дыхание даёт щит.";
-                },
-                List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
-
-        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int bonus = cfg.getIntEffect("ice_strike_bonus_damage", 1);
-                    int perStep = cfg.getIntEffect("ice_strike_levels_per_amplifier_step", 50);
-                    int chance = (int) Math.round(cfg.getEffect("ice_deep_freeze_chance", 0.025) * 100);
-                    return "Каждый удар +" + bonus + " урона и Замедление. Каждые " + perStep
-                            + " уровней +1 к Замедлению. Замедлённые враги бьют слабее. Шанс "
-                            + chance + "% — полная заморозка.";
-                },
-                List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
-
-        ClassRegistry.register(new ClassDefinition("vampire", "Вампир",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int dur = cfg.getIntEffect("vampire_active_duration_ticks", 200) / 20;
-                    int percent = (int) Math.round(cfg.getEffect("vampire_heal_percent", 0.60) * 100);
-                    int cdSec = cfg.getCooldown("vampire_drain", 1200) / 20;
-                    return "Восстанавливает " + percent + "% урона в HP. Активная («Вампиризм», "
-                            + dur + " сек, кулдаун " + cdSec + " сек) усиливает до 100%.";
-                },
-                List.of(new VampireDrainAbility(), new VampirePassiveAbility())));
-
-        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int dur = cfg.getIntEffect("invisibility_duration_ticks", 100) / 20;
-                    int mult = (int) Math.round(cfg.getEffect("ambush_damage_multiplier", 2.2) * 100) - 100;
-                    int cdSec = cfg.getCooldown("invisibility", 1200) / 20;
-                    return "Невидимость " + dur + " сек. Первый удар +" + mult
-                            + "% урона. Кулдаун " + cdSec + " сек.";
-                },
-                List.of(new InvisibilityAbility())));
-
-        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик",
-                () -> {
-                    int cd = ModConfig.getInstance().getCooldown("lucky_swap", 12000);
-                    int min = cd / 20 / 60;
-                    return "Меняет предмет в руке на случайный. Кулдаун " + min + " мин.";
-                },
-                List.of(new LuckySwapAbility())));
-
-        ClassRegistry.register(new ClassDefinition("runner", "Бегун",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int passiveAmp = cfg.getIntEffect("runner_passive_amplifier", 1) + 1;
-                    int sprintAmp = cfg.getIntEffect("runner_sprint_amplifier", 4) + 1;
-                    int dur = cfg.getIntEffect("runner_sprint_duration_ticks", 300) / 20;
-                    return "Постоянно даёт Скорость " + roman(passiveAmp) + ". Рывок — Скорость "
-                            + roman(sprintAmp) + " на " + dur + " сек.";
-                },
-                List.of(new RunnerSprintAbility(), new RunnerPassiveAbility())));
-
-        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадер",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int parkourAmp = cfg.getIntEffect("parkour_jump_amplifier", 4) + 1;
-                    int parkourDur = cfg.getIntEffect("parkour_duration_ticks", 220) / 20;
-                    return "Паркур — Прыгучесть " + roman(parkourAmp) + " на " + parkourDur
-                            + " сек. Сцепление — лазание по стенам. Урон от падения снижен.";
-                },
-                List.of(new ParkourAbility(), new ClimbingAbility(), new StuntmanAbility())));
-
-        ClassRegistry.register(new ClassDefinition("hero", "Герой",
-                "Дар героя — даёт изумруды, растёт с числом сделок. Слава героя — скидка у жителей.",
-                List.of(new HeroGiftAbility(), new HeroPassiveAbility())));
-
-        ClassRegistry.register(new ClassDefinition("porcupine", "Дикобраз",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int aDmg = (int) cfg.getEffect("porcupine_active_damage", 5.0);
-                    int aRad = (int) cfg.getEffect("porcupine_active_radius", 5.0);
-                    return "Шипы: " + aDmg + " урона в радиусе " + aRad
-                            + " блоков. Иглы, Игольчатый барьер, Хитиновый покров.";
-                },
-                List.of(
-                        new PorcupineQuillsAbility(),
-                        new PorcupineReflectAbility(),
-                        new PorcupineThornsAbility()
-                )));
-
-        ClassRegistry.register(new ClassDefinition("archer", "Лучник",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    double mult = cfg.getEffect("archer_draw_speed_multiplier", 1.5);
-                    int bonus = (int) cfg.getEffect("archer_bow_damage_bonus", 3.0);
-                    return "Лук натягивается в " + fmt(mult) + " раза быстрее. Урон стрел +" + bonus
-                            + ". Разрыв дистанции — прыжок назад.";
-                },
-                List.of(new ArcherJumpBackAbility(), new ArcherAbility())));
-
-        ClassRegistry.register(new ClassDefinition("assassin", "Опытный убийца",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    double chance = cfg.getEffect("assassin_instakill_chance", 0.005) * 100;
-                    return "С шансом " + String.format("%.1f", chance)
-                            + "% мгновенно убивает мобов, накапливая бонус к урону.";
-                },
-                List.of(new AssassinAbility())));
-
-        ClassRegistry.register(new ClassDefinition("titan", "Титан",
-                () -> {
-                    int amp = ModConfig.getInstance().getIntEffect("titan_resistance_amplifier", 0);
-                    return "Постоянно имеет Сопротивление " + roman(amp + 1)
-                            + ". Монолит — временное Сопротивление IV.";
-                },
-                List.of(new MonolithAbility(), new TitanAbility())));
-
-        ClassRegistry.register(new ClassDefinition("dodger", "Ловкач",
-                () -> {
-                    int chance = (int) Math.round(
-                            ModConfig.getInstance().getEffect("dodger_dodge_chance", 0.20) * 100);
-                    return "С шансом " + chance + "% уворачивается от атак. Ускорение — Скорость II.";
-                },
-                List.of(new DodgeSpeedBoostAbility(), new DodgerAbility())));
-
-        ClassRegistry.register(new ClassDefinition("brute", "Громила",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int maceBonus = (int) Math.round((cfg.getEffect("brute_mace_damage_multiplier", 1.5) - 1.0) * 100);
-                    int otherPenalty = (int) Math.round((1.0 - cfg.getEffect("brute_other_damage_multiplier", 0.3)) * 100);
-                    return "Урон булавы +" + maceBonus + "%, другое оружие −" + otherPenalty
-                            + "%. Дрожь земли — подброс врага.";
-                },
-                List.of(new EarthshakerAbility(), new BruteAbility())));
-
-        ClassRegistry.register(new ClassDefinition("mad_farmer", "Безумный фермер",
-                () -> {
-                    ModConfig cfg = ModConfig.getInstance();
-                    int hoeBonus = (int) Math.round((cfg.getEffect("farmer_hoe_damage_multiplier", 2.0) - 1.0) * 100);
-                    int otherPenalty = (int) Math.round((1.0 - cfg.getEffect("farmer_other_damage_multiplier", 0.2)) * 100);
-                    int mobsPerStep = cfg.getIntEffect("farmer_mobs_per_bonus_point", 100);
-                    return "Урон мотыгой +" + hoeBonus + "%. За каждые " + mobsPerStep
-                            + " убийств мобов — +" + fmt(cfg.getEffect("farmer_bonus_per_mob_step", 0.25))
-                            + " урона. Другое оружие −" + otherPenalty + "%. Лечебный отвар, Богатый урожай.";
-                },
-                List.of(new HealingBrewAbility(), new RichHarvestAbility(), new FarmerAbility())));
-
-        ClassRegistry.register(new ClassDefinition("reincarnator", "Реинкарнатор",
-                () -> {
-                    int chance = (int) Math.round(
-                            ModConfig.getInstance().getEffect("reincarnator_totem_save_chance", 0.70) * 100);
-                    return "Тотем бессмертия с шансом " + chance + "% не тратится. "
-                            + "Запрещена незеритовая броня.";
-                },
-                List.of(new ReincarnatorAbility())));
+        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор", "Мобильность и шанс спасения после тотема.", List.of(new TeleporterAbility(), new TeleporterLastChanceAbility())));
+        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора", "Истощает противника и получает преимущество над голодными целями.", List.of(new GluttonyDepletionAbility(), new GluttonySatiateAbility(), new GluttonyAbility(), new GluttonyCravingsAbility())));
+        ClassRegistry.register(new ClassDefinition("spry", "Живчик", "Большой запас здоровья и кратковременное поглощение.", List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
+        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин", "Замедляет противников и ослабляет их атаки.", List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
+        ClassRegistry.register(new ClassDefinition("vampire", "Вампир", "Восстанавливает здоровье за счёт нанесённого урона.", List.of(new VampireDrainAbility(), new VampirePassiveAbility())));
+        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка", "Засады и скрытное перемещение.", List.of(new InvisibilityAbility())));
+        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик", "Получает случайные предметы благодаря удаче.", List.of(new LuckySwapAbility())));
+        ClassRegistry.register(new ClassDefinition("runner", "Бегун", "Скорость, рывки и атаки на ходу.", List.of(new RunnerSprintAbility(), new RunnerPassiveAbility())));
+        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадёр", "Преодолевает высоту и стены.", List.of(new ParkourAbility(), new ClimbingAbility(), new StuntmanAbility())));
+        ClassRegistry.register(new ClassDefinition("hero", "Герой", "Экономическое развитие через торговлю и рейды.", List.of(new HeroGiftAbility(), new HeroPassiveAbility())));
+        ClassRegistry.register(new ClassDefinition("porcupine", "Дикобраз", "Наказывает врагов за приближение и удары.", List.of(new PorcupineQuillsAbility(), new PorcupineReflectAbility(), new PorcupineThornsAbility())));
+        ClassRegistry.register(new ClassDefinition("archer", "Лучник", "Дистанционные атаки и отступление.", List.of(new ArcherJumpBackAbility(), new ArcherAbility())));
+        ClassRegistry.register(new ClassDefinition("assassin", "Опытный убийца", "Постоянно развивается за счёт убийств мобов.", List.of(new AssassinAbility())));
+        ClassRegistry.register(new ClassDefinition("titan", "Титан", "Очень прочный боец с коротким защитным усилением.", List.of(new MonolithAbility(), new TitanAbility())));
+        ClassRegistry.register(new ClassDefinition("dodger", "Ловкач", "Уклонение от атак и ускорение.", List.of(new DodgeSpeedBoostAbility(), new DodgerAbility())));
+        ClassRegistry.register(new ClassDefinition("brute", "Громила", "Специалист по булаве и подбрасыванию врагов.", List.of(new EarthshakerAbility(), new BruteAbility())));
+        ClassRegistry.register(new ClassDefinition("mad_farmer", "Безумный фермер", "Сражается мотыгой и ускоряет сельское хозяйство.", List.of(new HealingBrewAbility(), new RichHarvestAbility(), new FarmerAbility())));
+        ClassRegistry.register(new ClassDefinition("reincarnator", "Реинкарнатор", "Выживает благодаря многократному использованию тотемов.", List.of(new ReincarnatorAbility())));
 
         LOGGER.info("Registered {} classes", ClassRegistry.getAll().size());
     }
@@ -530,7 +389,7 @@ public class ClassesHardcore implements ModInitializer {
                 ServerPlayer player = context.player();
                 PlayerClassData data = PlayerClassData.get(player);
 
-                if (payload.actionType() == 0) { // Случайный
+                if (payload.actionType() == 0) {
                     if (data.randomChangeTokens > 0) {
                         data.randomChangeTokens--;
                         String[] classes = ClassRegistry.getAll().keySet().toArray(new String[0]);
@@ -542,14 +401,11 @@ public class ClassesHardcore implements ModInitializer {
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет попыток для случайной смены класса."));
                     }
-                } else if (payload.actionType() == 1) { // Выбор из 3
+                } else if (payload.actionType() == 1) {
                     if (data.pick3ChangeTokens > 0) {
                         data.pick3ChangeTokens--;
                         List<String> allClasses = new ArrayList<>(ClassRegistry.getAll().keySet());
-
-                        // ИСКЛЮЧАЕМ ТЕКУЩИЙ КЛАСС
                         allClasses.remove(data.playerClass);
-
                         Collections.shuffle(allClasses);
                         List<String> options = allClasses.subList(0, Math.min(3, allClasses.size()));
 
@@ -558,7 +414,7 @@ public class ClassesHardcore implements ModInitializer {
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет попыток для выбора из 3 классов."));
                     }
-                } else if (payload.actionType() == 2) { // Админский
+                } else if (payload.actionType() == 2) {
                     if (Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(player.createCommandSourceStack())) {
                         if (ClassRegistry.get(payload.classId()) != null) {
                             ClassCommand.applyClass(player, payload.classId());
@@ -566,7 +422,7 @@ public class ClassesHardcore implements ModInitializer {
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет прав на это действие."));
                     }
-                } else if (payload.actionType() == 3) { // Подтверждение выбора из 3
+                } else if (payload.actionType() == 3) {
                     if (ClassRegistry.get(payload.classId()) != null) {
                         ClassCommand.applyClass(player, payload.classId());
                     }

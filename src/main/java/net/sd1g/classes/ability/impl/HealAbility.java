@@ -12,6 +12,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
+import net.sd1g.classes.data.PlayerClassData;
 
 import java.util.List;
 
@@ -19,76 +20,53 @@ public class HealAbility implements Ability {
     @Override public String getId() { return "heal"; }
     @Override public String getDisplayName() { return "Исцеление"; }
     @Override public boolean isPassive() { return false; }
-    @Override public int getBaseCooldown() { return 440; }
+    @Override public int getBaseCooldown() { return 440; } // 22 секунды
+
+    private float getHealAmount(ServerPlayer player) {
+        float base = 4.0f; // 4 HP
+        PlayerClassData data = PlayerClassData.get(player);
+        // Боевой ветеран: +0.5 HP за каждые 2000 убийств, макс +10 HP (20к убийств)
+        float bonus = Math.min((data.warriorSwordKills / 2000) * 0.5f, 10.0f);
+        return base + bonus;
+    }
 
     @Override
     public String getDescription() {
-        ModConfig cfg = ModConfig.getInstance();
-        int amount = (int) cfg.getEffect("heal_amount", 2.0);
-        int regenTicks = cfg.getIntEffect("heal_regen_ticks", 100);
-        int regenAmp = cfg.getIntEffect("heal_regen_amplifier", 0);
-        return "Мгновенно восстанавливает " + amount + " HP и накладывает Регенерацию "
-                + toRoman(regenAmp + 1) + " на " + (regenTicks / 20) + " сек.";
+        return "Восстанавливает 4 НР и накладывает Регенерацию I на 5 секунд. КД 22 сек.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        ModConfig cfg = ModConfig.getInstance();
-        int amount = (int) cfg.getEffect("heal_amount", 2.0);
-        int regenTicks = cfg.getIntEffect("heal_regen_ticks", 100);
-        int regenAmp = cfg.getIntEffect("heal_regen_amplifier", 0);
-        int cd = cfg.getCooldown("heal", getBaseCooldown());
-        return List.of(
-                "§7Мгновенное лечение: §a" + amount + " HP",
-                "§7Регенерация: §b" + toRoman(regenAmp + 1) + " §7на §f" + (regenTicks / 20) + " сек.",
-                "§7Кулдаун: §f" + (cd / 20) + " сек."
-        );
+        if (player instanceof ServerPlayer sp) {
+            float amount = getHealAmount(sp);
+            return List.of(
+                    "§7Мгновенное лечение: §a" + amount + " HP",
+                    "§7Регенерация: §bI §7на §f5 сек.",
+                    "§7Кулдаун: §f22 сек."
+            );
+        }
+        return List.of();
     }
 
     @Override
     public boolean onActivate(ServerPlayer player) {
-        ModConfig cfg = ModConfig.getInstance();
-        double amount = cfg.getEffect("heal_amount", 2.0);
-        int regenTicks = cfg.getIntEffect("heal_regen_ticks", 100);
-        int regenAmp = cfg.getIntEffect("heal_regen_amplifier", 0);
+        float amount = getHealAmount(player);
 
-        player.heal((float) amount);
-        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenTicks, regenAmp));
+        player.heal(amount);
+        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0)); // Реген I, 5 сек
 
         ServerLevel level = player.level();
-        double x = player.getX();
-        double y = player.getY();
-        double z = player.getZ();
+        double x = player.getX(), y = player.getY(), z = player.getZ();
 
-        // ---- Активация: восходящий золотой столб ----
         for (int i = 0; i < 12; i++) {
-            level.sendParticles(ParticleTypes.HEART,
-                    x, y + 0.4 + i * 0.15, z, 1, 0.3, 0, 0.3, 0.0);
+            level.sendParticles(ParticleTypes.HEART, x, y + 0.4 + i * 0.15, z, 1, 0.3, 0, 0.3, 0.0);
         }
-        level.sendParticles(new DustParticleOptions(0xFFAA00, 1.4f),
-                x, y + 0.5, z, 18, 0.5, 0.4, 0.5, 0.03);
-        level.sendParticles(new DustParticleOptions(0xFFD580, 1.0f),
-                x, y + 1.0, z, 12, 0.4, 0.3, 0.4, 0.02);
-        level.sendParticles(ParticleTypes.END_ROD,
-                x, y + 1.2, z, 8, 0.3, 0.3, 0.3, 0.02);
-        level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
-                x, y + 1.0, z, 6, 0.4, 0.4, 0.4, 0.03);
+        level.sendParticles(new DustParticleOptions(0xFFAA00, 1.4f), x, y + 0.5, z, 18, 0.5, 0.4, 0.5, 0.03);
+        level.sendParticles(ParticleTypes.END_ROD, x, y + 1.2, z, 8, 0.3, 0.3, 0.3, 0.02);
 
-        // Два звука: торжественный + звонкий акцент
-        level.playSound(null, x, y, z, SoundEvents.BEACON_ACTIVATE,
-                SoundSource.PLAYERS, 1.1f, 1.5f);
-        level.playSound(null, x, y, z, SoundEvents.AMETHYST_BLOCK_CHIME,
-                SoundSource.PLAYERS, 0.9f, 1.8f);
+        level.playSound(null, x, y, z, SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.5f);
 
-        player.sendOverlayMessage(Component.literal(
-                "§aИсцеление. §f+" + (int) amount + " HP."));
+        player.sendOverlayMessage(Component.literal("§aИсцеление. §f+" + (int) amount + " HP."));
         return true;
-    }
-
-    private static String toRoman(int n) {
-        return switch (n) {
-            case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; case 4 -> "IV"; case 5 -> "V";
-            default -> String.valueOf(n);
-        };
     }
 }

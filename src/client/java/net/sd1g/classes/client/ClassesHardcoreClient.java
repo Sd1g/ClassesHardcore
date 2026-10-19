@@ -1,6 +1,7 @@
 package net.sd1g.classes.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -25,8 +26,6 @@ import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.network.*;
 import org.lwjgl.glfw.GLFW;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -113,8 +112,18 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 cachedFirstActiveAbility = findActiveAbility(cachedClassDef, 0);
                 cachedSecondActiveAbility = findActiveAbility(cachedClassDef, 1);
 
+                // Сохраняем кулдаун кристаллов перед очисткой
+                int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
+
                 cooldownTicks.clear();
                 cooldownTotal.clear();
+
+                // Возвращаем кулдаун кристаллов обратно
+                if (crystalCd > 0) {
+                    cooldownTicks.put("end_crystal", crystalCd);
+                    cooldownTotal.put("end_crystal", 1800); // Стандартный максимум 90 сек
+                }
+
                 teleportAiming = false;
                 previewTickCounter = 0;
                 AbilityClientState.luckyDiggerMode = "efficiency";
@@ -174,7 +183,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             context.client().execute(() -> AbilityClientState.heroTrades = payload.trades());
         });
 
-        // Обработчики токенов и выбора из 3
         ClientPlayNetworking.registerGlobalReceiver(ClassTokensSyncPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 randomChangeTokens = payload.random();
@@ -194,14 +202,12 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             if (client.player == null) return;
             if (client.isPaused()) return;
 
-            // Открытие меню выбора класса
             while (openMenuKey.consumeClick()) {
                 if (client.gui.screen() == null) {
                     client.gui.setScreen(new ClassesHardcoreMenuScreen(null));
                 }
             }
 
-            // Открытие меню настроек иконок
             while (openConfigKey.consumeClick()) {
                 if (client.gui.screen() == null) {
                     client.gui.setScreen(new ClassesHardcoreConfigScreen(null));
@@ -314,9 +320,12 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    BufferedImage img = ImageIO.read(stream);
-                    if (img == null) return new int[]{32, 32};
-                    return new int[]{ img.getWidth(), img.getHeight() };
+                    // ИСПОЛЬЗУЕМ NativeImage ДЛЯ ПРЕДОТВРАЩЕНИЯ ЛАГОВ
+                    NativeImage img = NativeImage.read(stream);
+                    int w = img.getWidth();
+                    int h = img.getHeight();
+                    img.close();
+                    return new int[]{w, h};
                 }
             } catch (Exception e) {
                 return new int[]{32, 32};
@@ -361,6 +370,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         int hotbarRight = screenWidth / 2 + 91;
         int startX = hotbarRight + 8;
         int startY = screenHeight - SQUARE_SIZE - KEY_LABEL_HEIGHT - 4;
+
+        // === ОТРИСОВКА КД КРИСТАЛЛОВ ===
+        int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
+        if (crystalCd > 0) {
+            int seconds = (crystalCd + 19) / 20;
+            String text = "§dКристаллы: §c" + seconds + "с";
+            graphics.text(font, text, startX, startY - 12, 0xFFFFFFFF, true);
+        }
 
         ClassDefinition def = cachedClassDef;
 

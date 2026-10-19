@@ -1,5 +1,6 @@
 package net.sd1g.classes.client;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -10,13 +11,12 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.util.FormattedCharSequence;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.network.RequestClassChangePayload;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +25,13 @@ import java.util.Map;
 public class ClassesHardcoreMenuScreen extends Screen {
     private final Screen parent;
     private ClassDefinition selectedClass = null;
+
+    // Кэш для списка классов
+    private List<ClassDefinition> allClasses = new ArrayList<>();
+
+    // Кэш для разбитого текста
+    private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
+    private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
     private int leftPanelWidth;
     private int rightPanelWidth;
@@ -57,24 +64,19 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         this.columnWidth = (leftPanelWidth - PADDING * 2) / COLUMNS;
 
-        if (selectedClass == null) {
-            List<ClassDefinition> all = new ArrayList<>(ClassRegistry.getAll().values());
-            if (!all.isEmpty()) {
-                selectedClass = all.getFirst();
-            }
+        // Загружаем список классов ОДИН РАЗ при открытии
+        this.allClasses = new ArrayList<>(ClassRegistry.getAll().values());
+
+        if (selectedClass == null && !allClasses.isEmpty()) {
+            selectedClass = allClasses.getFirst();
         }
+        updateCachedText();
 
         int buttonY = this.height - 30;
         boolean isAdmin = Minecraft.getInstance().player != null &&
                 Minecraft.getInstance().player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
 
-        // Динамическая ширина кнопок
-        int buttonWidth;
-        if (isAdmin) {
-            buttonWidth = (rightPanelWidth - PADDING * 2) / 3;
-        } else {
-            buttonWidth = (rightPanelWidth - PADDING) / 2;
-        }
+        int buttonWidth = isAdmin ? (rightPanelWidth - PADDING * 2) / 3 : (rightPanelWidth - PADDING) / 2;
 
         this.addRenderableWidget(Button.builder(
                 Component.literal("§eСлучайная смена"),
@@ -95,6 +97,15 @@ public class ClassesHardcoreMenuScreen extends Screen {
                         }
                     }
             ).bounds(rightPanelX + (buttonWidth + PADDING) * 2, buttonY, buttonWidth, 24).build());
+        }
+    }
+
+    private void updateCachedText() {
+        if (selectedClass == null) return;
+        cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
+        cachedAbilityLines.clear();
+        for (Ability ability : selectedClass.abilities) {
+            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32));
         }
     }
 
@@ -121,7 +132,6 @@ public class ClassesHardcoreMenuScreen extends Screen {
             gfx.text(this.font, "Текущий класс: §7Неизвестно", PADDING + 5, topPanelY + 11, 0xFFFFFFFF, true);
         }
 
-        // Красивый текст токенов
         String tokenText = "§6🎲 Случайный: §a" + ClassesHardcoreClient.randomChangeTokens +
                 "   §6🔮 Из 3-х: §a" + ClassesHardcoreClient.pick3ChangeTokens;
         int textWidth = this.font.width(tokenText);
@@ -131,7 +141,6 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private void renderLeftPanel(GuiGraphicsExtractor gfx, int mouseX, int mouseY) {
         drawBeveledPanel(gfx, PADDING, mainContentY, leftPanelWidth, mainContentHeight, 0xCC151515);
 
-        List<ClassDefinition> allClasses = new ArrayList<>(ClassRegistry.getAll().values());
         int startY = mainContentY + 10;
         int startX = PADDING + 10;
 
@@ -180,8 +189,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         int textY = contentY + ICON_SIZE + 15;
 
-        List<net.minecraft.util.FormattedCharSequence> descLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
-        for (net.minecraft.util.FormattedCharSequence line : descLines) {
+        for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
             textY += 10;
         }
@@ -190,13 +198,13 @@ public class ClassesHardcoreMenuScreen extends Screen {
         gfx.text(this.font, "§lСпособности:", contentX, textY, 0xFFFFAA00, true);
         textY += 15;
 
-        for (Ability ability : selectedClass.abilities) {
+        for (int i = 0; i < selectedClass.abilities.size(); i++) {
+            Ability ability = selectedClass.abilities.get(i);
             drawIcon(gfx, ability.getIcon(), contentX, textY, 16);
             gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 22, textY + 4, 0xFFFFFFFF, true);
 
-            List<net.minecraft.util.FormattedCharSequence> abiDesc = this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32);
             int abiY = textY + 16;
-            for (net.minecraft.util.FormattedCharSequence line : abiDesc) {
+            for (FormattedCharSequence line : cachedAbilityLines.get(i)) {
                 gfx.text(this.font, line, contentX + 22, abiY, 0xFF888888, true);
                 abiY += 10;
             }
@@ -238,8 +246,12 @@ public class ClassesHardcoreMenuScreen extends Screen {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    BufferedImage img = ImageIO.read(stream);
-                    return img == null ? new int[]{32, 32} : new int[]{img.getWidth(), img.getHeight()};
+                    // ИСПОЛЬЗУЕМ NativeImage ВМЕСТО МЕДЛЕННОГО ImageIO
+                    NativeImage img = NativeImage.read(stream);
+                    int w = img.getWidth();
+                    int h = img.getHeight();
+                    img.close();
+                    return new int[]{w, h};
                 }
             } catch (Exception e) { return new int[]{32, 32}; }
         });
@@ -251,7 +263,6 @@ public class ClassesHardcoreMenuScreen extends Screen {
         double mouseY = event.y();
 
         if (mouseX < leftPanelWidth && event.button() == 0) {
-            List<ClassDefinition> allClasses = new ArrayList<>(ClassRegistry.getAll().values());
             int startY = mainContentY + 10;
             int startX = PADDING + 10;
 
@@ -261,7 +272,10 @@ public class ClassesHardcoreMenuScreen extends Screen {
                 int y = startY + (i / COLUMNS) * (ITEM_HEIGHT + ITEM_SPACING);
 
                 if (mouseX >= x && mouseX <= x + columnWidth - ITEM_SPACING && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
-                    selectedClass = def;
+                    if (selectedClass != def) {
+                        selectedClass = def;
+                        updateCachedText(); // Обновляем кэш при смене класса
+                    }
                     return true;
                 }
             }

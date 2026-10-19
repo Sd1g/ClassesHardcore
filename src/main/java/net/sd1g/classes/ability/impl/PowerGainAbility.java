@@ -13,7 +13,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
-import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -25,109 +24,89 @@ public class PowerGainAbility implements Ability {
     @Override public boolean isPassive() { return true; }
     @Override public int getBaseCooldown() { return 0; }
 
-    public static double computeBonus(int level) {
-        ModConfig cfg = ModConfig.getInstance();
-        int levelsPerPoint = cfg.getIntEffect("power_gain_levels_per_point", 10);
-        if (levelsPerPoint <= 0) return 0;
-        double t1 = cfg.getEffect("power_gain_damage_tier1", 0.5);
-        double t2 = cfg.getEffect("power_gain_damage_tier2", 0.25);
-        double t3 = cfg.getEffect("power_gain_damage_tier3", 0.1);
-        int maxT1 = cfg.getIntEffect("power_gain_tier1_max_level", 100);
-        int maxT2 = cfg.getIntEffect("power_gain_tier2_max_level", 200);
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/power_gain"); }
 
-        double bonus = 0;
-        bonus += (Math.min(level, maxT1) / (double) levelsPerPoint) * t1;
-        if (level > maxT1) bonus += (Math.min(level - maxT1, maxT2 - maxT1) / (double) levelsPerPoint) * t2;
-        if (level > maxT2) bonus += ((level - maxT2) / (double) levelsPerPoint) * t3;
-        return bonus;
+    // Жесткая формула из документа
+    public static double getBonusHP(int level) {
+        double hp = 0;
+
+        // 1-100 уровень: +1 HP за каждые 10 уровней
+        if (level >= 10) {
+            hp += Math.min(level / 10, 10) * 1.0;
+        }
+        // 101-200 уровень: +0.5 HP за каждые 10 уровней
+        if (level > 100) {
+            hp += Math.min((level - 100) / 10, 10) * 0.5;
+        }
+        // 201+ уровень: +0.25 HP за каждые 10 уровней
+        if (level > 200) {
+            hp += ((level - 200) / 10) * 0.25;
+        }
+
+        return hp;
     }
 
     @Override
     public String getDescription() {
-        int levels = ModConfig.getInstance().getIntEffect("power_gain_levels_per_point", 10);
-        return "Даёт бонус к урону за каждые " + levels + " уровней опыта.";
+        return "За каждые 10 уровней опыта получает +1 НР урона в ближнем бою; после 100-го уровня +0,5 НР, после 200-го +0,25 НР.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        ModConfig cfg = ModConfig.getInstance();
-        int levelsPerPoint = cfg.getIntEffect("power_gain_levels_per_point", 10);
         int level = player.experienceLevel;
-        double bonus = computeBonus(level);
-        int toNext = levelsPerPoint > 0 ? levelsPerPoint - (level % levelsPerPoint) : 0;
+        double bonusHP = getBonusHP(level);
+        int toNext = 10 - (level % 10);
+
         return List.of(
                 "§7Текущий уровень: §f" + level,
-                "§7Текущий бонус: §c+" + fmt(bonus) + " урона",
+                "§7Текущий бонус: §c+" + String.format("%.2f", bonusHP) + " НР урона",
                 "§7До следующего шага: §f" + toNext + " ур."
         );
     }
 
     @Override
     public void onPassiveTick(ServerPlayer player) {
-        double targetBonus = computeBonus(player.experienceLevel);
+        double bonusHP = getBonusHP(player.experienceLevel);
+        // В Minecraft 1 HP = 0.5 единицы урона в атрибутах
+        double targetDamage = bonusHP * 0.5;
+
         AttributeInstance attr = player.getAttribute(Attributes.ATTACK_DAMAGE);
         if (attr == null) return;
 
         AttributeModifier existing = attr.getModifier(MODIFIER_ID);
         double oldBonus = existing != null ? existing.amount() : 0.0;
-        boolean increased = targetBonus > oldBonus + 1e-6;
-        boolean changed = Math.abs(oldBonus - targetBonus) > 1e-6;
+        boolean increased = targetDamage > oldBonus + 1e-6;
+        boolean changed = Math.abs(oldBonus - targetDamage) > 1e-6;
 
         if (changed) {
-            if (targetBonus > 0) {
+            if (targetDamage > 0) {
                 attr.addOrUpdateTransientModifier(new AttributeModifier(
-                        MODIFIER_ID, targetBonus, AttributeModifier.Operation.ADD_VALUE));
+                        MODIFIER_ID, targetDamage, AttributeModifier.Operation.ADD_VALUE));
             } else {
                 attr.removeModifier(MODIFIER_ID);
             }
         }
 
-        ServerLevel level = player.level();
-        double x = player.getX();
-        double y = player.getY();
-        double z = player.getZ();
-
-        // Событие повышения — звук + вспышка
+        // Эффекты при повышении уровня
         if (increased) {
-            level.playSound(null, x, y + 1, z, SoundEvents.ANVIL_FALL, SoundSource.PLAYERS, 0.9f, 1.4f);
-            level.playSound(null, x, y + 1, z, SoundEvents.ARMOR_EQUIP_NETHERITE, SoundSource.PLAYERS, 0.8f, 1.6f);
-            level.sendParticles(ParticleTypes.CRIT, x, y + 1, z, 15, 0.5, 0.5, 0.5, 0.1);
-            level.sendParticles(ParticleTypes.FLAME, x, y + 1, z, 10, 0.3, 0.3, 0.3, 0.02);
-            level.sendParticles(new DustParticleOptions(0xCC2222, 1.3f), x, y + 1, z, 20, 0.5, 0.5, 0.5, 0.05);
-            level.sendParticles(new DustParticleOptions(0xFF6619, 1.1f), x, y + 1, z, 15, 0.4, 0.4, 0.4, 0.05);
+            ServerLevel level = player.level();
+            level.playSound(null, player.getX(), player.getY() + 1, player.getZ(), SoundEvents.ANVIL_FALL, SoundSource.PLAYERS, 0.9f, 1.4f);
+            level.sendParticles(ParticleTypes.CRIT, player.getX(), player.getY() + 1, player.getZ(), 15, 0.5, 0.5, 0.5, 0.1);
+            level.sendParticles(new DustParticleOptions(0xCC2222, 1.3f), player.getX(), player.getY() + 1, player.getZ(), 20, 0.5, 0.5, 0.5, 0.05);
         }
 
-        // Аура багровая — искры у рук, раз в 15 тиков
+        // Аура (красные искры)
         if (player.tickCount % 15 == 0) {
-            level.sendParticles(new DustParticleOptions(0xCC2222, 1.0f),
-                    x + 0.4, y + 1.1, z, 2, 0.15, 0.1, 0.15, 0.02);
-            level.sendParticles(new DustParticleOptions(0xCC2222, 1.0f),
-                    x - 0.4, y + 1.1, z, 2, 0.15, 0.1, 0.15, 0.02);
-        }
-        // Столб багровых частиц — восходит, раз в 15 тиков
-        if (player.tickCount % 15 == 0) {
-            for (int i = 0; i < 2; i++) {
-                double dy = 0.3 + i * 0.6;
-                level.sendParticles(new DustParticleOptions(0xCC2222, 0.9f),
-                        x + (player.getRandom().nextDouble() - 0.5) * 0.5,
-                        y + dy,
-                        z + (player.getRandom().nextDouble() - 0.5) * 0.5,
-                        1, 0, 0.02, 0, 0);
-            }
-        }
-        // Редкие CRIT — «искры силы»
-        if (player.tickCount % 30 == 0) {
-            level.sendParticles(ParticleTypes.CRIT, x, y + 1.2, z, 3, 0.4, 0.3, 0.4, 0.05);
+            ServerLevel level = player.level();
+            double x = player.getX(), y = player.getY(), z = player.getZ();
+            level.sendParticles(new DustParticleOptions(0xCC2222, 1.0f), x + 0.4, y + 1.1, z, 2, 0.15, 0.1, 0.15, 0.02);
+            level.sendParticles(new DustParticleOptions(0xCC2222, 1.0f), x - 0.4, y + 1.1, z, 2, 0.15, 0.1, 0.15, 0.02);
         }
     }
 
     public static void removeBonus(ServerPlayer player) {
         AttributeInstance attr = player.getAttribute(Attributes.ATTACK_DAMAGE);
         if (attr != null) attr.removeModifier(MODIFIER_ID);
-    }
-
-    private static String fmt(double v) {
-        if (v == Math.floor(v)) return String.valueOf((long) v);
-        return String.valueOf(v);
     }
 }
