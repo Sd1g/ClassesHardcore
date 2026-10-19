@@ -13,23 +13,10 @@ import net.minecraft.stats.Stats;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
-import net.sd1g.classes.ability.impl.AssassinAbility;
-import net.sd1g.classes.ability.impl.HeroPassiveAbility;
-import net.sd1g.classes.ability.impl.IceStrikeAbility;
-import net.sd1g.classes.ability.impl.InvisibilityAbility;
-import net.sd1g.classes.ability.impl.LifeExperienceAbility;
-import net.sd1g.classes.ability.impl.LuckyDiggerMiningAbility;
-import net.sd1g.classes.ability.impl.PorcupineReflectAbility;
-import net.sd1g.classes.ability.impl.PorcupineThornsAbility;
-import net.sd1g.classes.ability.impl.PowerGainAbility;
-import net.sd1g.classes.ability.impl.RunnerPassiveAbility;
-import net.sd1g.classes.ability.impl.RunnerSprintAbility;
-import net.sd1g.classes.ability.impl.SpeedBoostAbility;
-import net.sd1g.classes.ability.impl.TitanAbility;
-import net.sd1g.classes.ability.impl.VampireDrainAbility;
-import net.sd1g.classes.ability.impl.VitalityAbility;
+import net.sd1g.classes.ability.impl.*;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.ClassSyncPayload;
+import net.sd1g.classes.network.ClassTokensSyncPayload;
 import net.sd1g.classes.network.CooldownSyncPayload;
 import net.sd1g.classes.network.HeroSyncPayload;
 import net.sd1g.classes.network.LuckyDiggerSyncPayload;
@@ -117,7 +104,6 @@ public class ClassCommand {
                                 return all.size();
                             }))
 
-                    // ============= /class cooldown reset <player> =============
                     .then(Commands.literal("cooldown")
                             .then(Commands.literal("reset")
                                     .then(Commands.argument("player", EntityArgument.player())
@@ -134,21 +120,43 @@ public class ClassCommand {
                                                         "§aУ игрока §f" + target.getName().getString()
                                                                 + " §aсброшено кулдаунов: §f" + count + "§a."), true);
                                                 return count;
+                                            }))))
+
+                    // ============= /class token =============
+                    .then(Commands.literal("token")
+                            .then(Commands.literal("random")
+                                    .then(Commands.argument("player", EntityArgument.player())
+                                            .executes(ctx -> {
+                                                ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+                                                PlayerClassData data = PlayerClassData.get(target);
+                                                data.randomChangeTokens++;
+                                                PlayerClassData.markDirty(target);
+                                                ServerPlayNetworking.send(target, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+                                                ctx.getSource().sendSuccess(() -> Component.literal(
+                                                        "§aВыдан 1 токен на случайную смену класса игроку §f" + target.getName().getString()), true);
+                                                return 1;
+                                            })))
+                            .then(Commands.literal("pick3")
+                                    .then(Commands.argument("player", EntityArgument.player())
+                                            .executes(ctx -> {
+                                                ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+                                                PlayerClassData data = PlayerClassData.get(target);
+                                                data.pick3ChangeTokens++;
+                                                PlayerClassData.markDirty(target);
+                                                ServerPlayNetworking.send(target, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+                                                ctx.getSource().sendSuccess(() -> Component.literal(
+                                                        "§aВыдан 1 токен на выбор из 3 классов игроку §f" + target.getName().getString()), true);
+                                                return 1;
                                             })))));
         });
     }
 
-    /**
-     * Сбрасывает только те способности, которые сейчас в кулдауне.
-     * Возвращает количество сброшенных.
-     */
     private static int resetActiveCooldowns(ServerPlayer target) {
         PlayerClassData data = PlayerClassData.get(target);
         long now = target.level().getServer() != null
                 ? target.level().getServer().getTickCount()
                 : 0L;
 
-        // Находим все активные кулдауны (endTick > now)
         List<String> activeIds = new ArrayList<>();
         for (Map.Entry<String, Long> e : data.abilityCooldowns.entrySet()) {
             if (e.getValue() != null && e.getValue() > now) {
@@ -157,12 +165,10 @@ public class ClassCommand {
         }
 
         if (activeIds.isEmpty()) {
-            // Заодно чистим мёртвые записи (endTick <= now), если есть
             data.abilityCooldowns.entrySet().removeIf(e -> e.getValue() == null || e.getValue() <= now);
             return 0;
         }
 
-        // Удаляем и уведомляем клиент
         for (String id : activeIds) {
             data.abilityCooldowns.remove(id);
             ServerPlayNetworking.send(target, new CooldownSyncPayload(id, 0));
@@ -171,7 +177,7 @@ public class ClassCommand {
         return activeIds.size();
     }
 
-    private static void applyClass(ServerPlayer target, String classId) {
+    public static void applyClass(ServerPlayer target, String classId) {
         PowerGainAbility.removeBonus(target);
         SpeedBoostAbility.removeEffects(target);
         LuckyDiggerMiningAbility.removeEffects(target);

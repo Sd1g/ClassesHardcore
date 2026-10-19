@@ -1,9 +1,10 @@
 {
-  "key.categories.classeshardcore.classes": "Classes Hardcore",
-  "key.classeshardcore.activate": "Activate ability",
-  "key.classeshardcore.activate_secondary": "Activate secondary ability",
-  "key.classeshardcore.open_menu": "Open ClassesHardcore config",
-  "classeshardcore.config.title": "Classes Hardcore — Configuration",
-  "classeshardcore.config.icon_size": "Icon size: %s px",
-  "item.classeshardcore.class_token": "Class Token"
+  "key.categories.classesharcore.classes": "Classes Hardcore",
+  "key.classesharcore.activate": "Activate ability",
+  "key.classesharcore.activate_secondary": "Activate secondary ability",
+  "key.classesharcore.open_menu": "Open class menu",
+  "key.classesharcore.open_config": "Open classes config",
+  "classesharcore.config.title": "Classes Hardcore — Configuration",
+  "classesharcore.config.icon_size": "Icon size: %s px",
+  "item.classesharcore.class_token": "Class Token"
 }

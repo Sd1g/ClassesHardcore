@@ -22,16 +22,7 @@ import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.ability.impl.TeleporterAbility;
 import net.sd1g.classes.data.AbilityClientState;
-import net.sd1g.classes.network.AssassinSyncPayload;
-import net.sd1g.classes.network.ClassSyncPayload;
-import net.sd1g.classes.network.CooldownSyncPayload;
-import net.sd1g.classes.network.FarmerSyncPayload;
-import net.sd1g.classes.network.HeroSyncPayload;
-import net.sd1g.classes.network.InvisibilitySyncPayload;
-import net.sd1g.classes.network.LuckyDiggerSyncPayload;
-import net.sd1g.classes.network.RunnerSyncPayload;
-import net.sd1g.classes.network.UseAbilityPayload;
-import net.sd1g.classes.network.VampireSyncPayload;
+import net.sd1g.classes.network.*;
 import org.lwjgl.glfw.GLFW;
 
 import javax.imageio.ImageIO;
@@ -45,10 +36,16 @@ import java.util.Map;
 public class ClassesHardcoreClient implements ClientModInitializer {
     public static KeyMapping activateAbilityKey;
     public static KeyMapping activateSecondaryKey;
+    public static KeyMapping openMenuKey;
     public static KeyMapping openConfigKey;
+
     public static final Map<String, Integer> cooldownTicks = new HashMap<>();
     public static final Map<String, Integer> cooldownTotal = new HashMap<>();
     public static String currentClass = "none";
+
+    // Токены
+    public static int randomChangeTokens = 0;
+    public static int pick3ChangeTokens = 0;
 
     private static ClassDefinition cachedClassDef = null;
     private static String cachedFirstActiveAbility = null;
@@ -62,10 +59,9 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     private static boolean teleportAiming = false;
     private static int previewTickCounter = 0;
 
-    // ---- Размеры иконок (динамические) ----
-    public static final int ICON_INSET = 2;
-    public static int ICON_SIZE = 24;
-    public static int SQUARE_SIZE = ICON_SIZE + ICON_INSET * 2;
+    private static final int ICON_INSET = 2;
+    private static int ICON_SIZE = 24;
+    private static int SQUARE_SIZE = ICON_SIZE + ICON_INSET * 2;
 
     private static final int SQUARE_SPACING = 3;
     private static final int KEY_LABEL_HEIGHT = 9;
@@ -82,7 +78,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     private static final int TOOLTIP_BORDER = 0xFF5000FF;
     private static final int GLINT_COLOR = 0x80AA00FF;
 
-    // ---- Кулдаун ----
     private static final int COOLDOWN_OVERLAY_COLOR = 0xA0000000;
     private static final int COOLDOWN_TEXT_COLOR = 0xFFFFAA00;
 
@@ -99,13 +94,16 @@ public class ClassesHardcoreClient implements ClientModInitializer {
 
         KeyMapping.Category category = KeyMapping.Category.register(ClassesHardcore.id("classes"));
         activateAbilityKey = KeyMappingHelper.registerKeyMapping(
-                new KeyMapping("key.classeshardcore.activate", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R, category)
+                new KeyMapping("key.classesharcore.activate", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R, category)
         );
         activateSecondaryKey = KeyMappingHelper.registerKeyMapping(
-                new KeyMapping("key.classeshardcore.activate_secondary", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V, category)
+                new KeyMapping("key.classesharcore.activate_secondary", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V, category)
+        );
+        openMenuKey = KeyMappingHelper.registerKeyMapping(
+                new KeyMapping("key.classesharcore.open_menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, category)
         );
         openConfigKey = KeyMappingHelper.registerKeyMapping(
-                new KeyMapping("key.classeshardcore.open_menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category)
+                new KeyMapping("key.classesharcore.open_config", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category)
         );
 
         ClientPlayNetworking.registerGlobalReceiver(ClassSyncPayload.TYPE, (payload, context) -> {
@@ -150,27 +148,19 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(VampireSyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                AbilityClientState.vampireActiveTicks = payload.activeTicks();
-            });
+            context.client().execute(() -> AbilityClientState.vampireActiveTicks = payload.activeTicks());
         });
 
         ClientPlayNetworking.registerGlobalReceiver(InvisibilitySyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                AbilityClientState.invisibilityActiveTicks = payload.activeTicks();
-            });
+            context.client().execute(() -> AbilityClientState.invisibilityActiveTicks = payload.activeTicks());
         });
 
         ClientPlayNetworking.registerGlobalReceiver(RunnerSyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                AbilityClientState.runnerSprintTicks = payload.activeTicks();
-            });
+            context.client().execute(() -> AbilityClientState.runnerSprintTicks = payload.activeTicks());
         });
 
         ClientPlayNetworking.registerGlobalReceiver(AssassinSyncPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                AbilityClientState.assassinBonusDamage = payload.bonusDamage();
-            });
+            context.client().execute(() -> AbilityClientState.assassinBonusDamage = payload.bonusDamage());
         });
 
         ClientPlayNetworking.registerGlobalReceiver(FarmerSyncPayload.TYPE, (payload, context) -> {
@@ -181,8 +171,22 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(HeroSyncPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> AbilityClientState.heroTrades = payload.trades());
+        });
+
+        // Обработчики токенов и выбора из 3
+        ClientPlayNetworking.registerGlobalReceiver(ClassTokensSyncPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
-                AbilityClientState.heroTrades = payload.trades();
+                randomChangeTokens = payload.random();
+                pick3ChangeTokens = payload.pick3();
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(Pick3OptionsPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                if (context.client().gui.screen() instanceof ClassesHardcoreMenuScreen) {
+                    context.client().gui.setScreen(new Pick3Screen(context.client().gui.screen(), payload.classIds()));
+                }
             });
         });
 
@@ -190,7 +194,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             if (client.player == null) return;
             if (client.isPaused()) return;
 
-            // Открытие меню настроек
+            // Открытие меню выбора класса
+            while (openMenuKey.consumeClick()) {
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new ClassesHardcoreMenuScreen(null));
+                }
+            }
+
+            // Открытие меню настроек иконок
             while (openConfigKey.consumeClick()) {
                 if (client.gui.screen() == null) {
                     client.gui.setScreen(new ClassesHardcoreConfigScreen(null));
@@ -202,7 +213,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 previewTickCounter = 0;
             }
 
-            // Клики по активкам игнорируем, если открыт экран (кроме нашего меню, там свои кнопки)
             if (client.gui.screen() == null) {
                 while (activateAbilityKey.consumeClick()) {
                     handlePrimaryActivation();
@@ -410,7 +420,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                     int seconds = (remaining + 19) / 20;
                     String timeText = String.valueOf(seconds);
 
-                    // Масштаб цифры пропорционален размеру иконки
                     float sizeScale = Math.max(0.5f, ICON_SIZE / 24.0f);
                     float scale = sizeScale * (timeText.length() <= 1 ? 1.0f : 0.8f);
 

@@ -1,9 +1,10 @@
 {
-  "key.categories.classeshardcore.classes": "Классы Hardcore",
-  "key.classeshardcore.activate": "Активировать способность",
-  "key.classeshardcore.activate_secondary": "Активировать вторую способность",
-  "key.classeshardcore.open_menu": "Открыть настройки ClassesHardcore",
-  "classeshardcore.config.title": "Classes Hardcore — Настройки",
-  "classeshardcore.config.icon_size": "Размер иконок: %s px",
-  "item.classeshardcore.class_token": "Токен класса"
+  "key.categories.classesharcore.classes": "Классы Hardcore",
+  "key.classesharcore.activate": "Активировать способность",
+  "key.classesharcore.activate_secondary": "Активировать вторую способность",
+  "key.classesharcore.open_menu": "Открыть меню классов",
+  "key.classesharcore.open_config": "Настройки иконок",
+  "classesharcore.config.title": "Classes Hardcore — Настройки",
+  "classesharcore.config.icon_size": "Размер иконок: %s px",
+  "item.classesharcore.class_token": "Токен класса"
 }

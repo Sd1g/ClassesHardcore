@@ -29,69 +29,17 @@ import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.AbilityManager;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
-import net.sd1g.classes.ability.impl.ArcherAbility;
-import net.sd1g.classes.ability.impl.ArcherJumpBackAbility;
-import net.sd1g.classes.ability.impl.AssassinAbility;
-import net.sd1g.classes.ability.impl.BruteAbility;
-import net.sd1g.classes.ability.impl.ClimbingAbility;
-import net.sd1g.classes.ability.impl.DodgeSpeedBoostAbility;
-import net.sd1g.classes.ability.impl.DodgerAbility;
-import net.sd1g.classes.ability.impl.EarthshakerAbility;
-import net.sd1g.classes.ability.impl.FarmerAbility;
-import net.sd1g.classes.ability.impl.GluttonyAbility;
-import net.sd1g.classes.ability.impl.GluttonyCravingsAbility;
-import net.sd1g.classes.ability.impl.GluttonyDepletionAbility;
-import net.sd1g.classes.ability.impl.GluttonySatiateAbility;
-import net.sd1g.classes.ability.impl.HealAbility;
-import net.sd1g.classes.ability.impl.HealingBrewAbility;
-import net.sd1g.classes.ability.impl.HeroGiftAbility;
-import net.sd1g.classes.ability.impl.HeroPassiveAbility;
-import net.sd1g.classes.ability.impl.IceDeepFreezeAbility;
-import net.sd1g.classes.ability.impl.IceStrikeAbility;
-import net.sd1g.classes.ability.impl.IceWeakeningAbility;
-import net.sd1g.classes.ability.impl.InvisibilityAbility;
-import net.sd1g.classes.ability.impl.LifeExperienceAbility;
-import net.sd1g.classes.ability.impl.LuckyDiggerFortuneHandler;
-import net.sd1g.classes.ability.impl.LuckyDiggerMiningAbility;
-import net.sd1g.classes.ability.impl.LuckyDiggerToggleAbility;
-import net.sd1g.classes.ability.impl.LuckySwapAbility;
-import net.sd1g.classes.ability.impl.MonolithAbility;
-import net.sd1g.classes.ability.impl.ParkourAbility;
-import net.sd1g.classes.ability.impl.PorcupineQuillsAbility;
-import net.sd1g.classes.ability.impl.PorcupineReflectAbility;
-import net.sd1g.classes.ability.impl.PorcupineThornsAbility;
-import net.sd1g.classes.ability.impl.PowerGainAbility;
-import net.sd1g.classes.ability.impl.ReincarnatorAbility;
-import net.sd1g.classes.ability.impl.RichHarvestAbility;
-import net.sd1g.classes.ability.impl.RunnerPassiveAbility;
-import net.sd1g.classes.ability.impl.RunnerSprintAbility;
-import net.sd1g.classes.ability.impl.SecondWindAbility;
-import net.sd1g.classes.ability.impl.SpeedBoostAbility;
-import net.sd1g.classes.ability.impl.StuntmanAbility;
-import net.sd1g.classes.ability.impl.TeleporterAbility;
-import net.sd1g.classes.ability.impl.TeleporterLastChanceAbility;
-import net.sd1g.classes.ability.impl.TitanAbility;
-import net.sd1g.classes.ability.impl.TntOwnerTracker;
-import net.sd1g.classes.ability.impl.VampireDrainAbility;
-import net.sd1g.classes.ability.impl.VampirePassiveAbility;
-import net.sd1g.classes.ability.impl.VitalityAbility;
+import net.sd1g.classes.ability.impl.*;
 import net.sd1g.classes.command.ClassCommand;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.ClassStateSaver;
 import net.sd1g.classes.data.PlayerClassData;
-import net.sd1g.classes.network.AssassinSyncPayload;
-import net.sd1g.classes.network.ClassSyncPayload;
-import net.sd1g.classes.network.CooldownSyncPayload;
-import net.sd1g.classes.network.FarmerSyncPayload;
-import net.sd1g.classes.network.HeroSyncPayload;
-import net.sd1g.classes.network.InvisibilitySyncPayload;
-import net.sd1g.classes.network.LuckyDiggerSyncPayload;
-import net.sd1g.classes.network.RunnerSyncPayload;
-import net.sd1g.classes.network.UseAbilityPayload;
-import net.sd1g.classes.network.VampireSyncPayload;
+import net.sd1g.classes.network.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -203,6 +151,7 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(player, new ClassSyncPayload(data.playerClass));
             ServerPlayNetworking.send(player, new AssassinSyncPayload(data.assassinBonusDamage));
             ServerPlayNetworking.send(player, new HeroSyncPayload(data.heroTrades));
+            ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
 
             if ("lucky_digger".equals(data.playerClass)) {
                 ServerPlayNetworking.send(player, new LuckyDiggerSyncPayload(
@@ -377,10 +326,9 @@ public class ClassesHardcore implements ModInitializer {
                 () -> {
                     ModConfig cfg = ModConfig.getInstance();
                     int min = (int) cfg.getEffect("teleport_min_distance", 3.0);
-                    int max = (int) cfg.getEffect("teleport_max_distance", 20.0);
-                    int cdSec = cfg.getCooldown("teleport", 400) / 20;
-                    return "Мгновенно переносится на " + min + "–" + max + " блоков. Кулдаун "
-                            + cdSec + " сек. При спасении тотемом может телепортироваться.";
+                    int max = (int) cfg.getEffect("teleport_max_distance", 30.0);
+                    int chance = (int) Math.round(cfg.getEffect("teleport_success_chance", 0.30) * 100);
+                    return "Мгновенно переносится на " + min + "–" + max + " блоков. Шанс " + chance + "%. КД зависит от дистанции.";
                 },
                 List.of(new TeleporterAbility(), new TeleporterLastChanceAbility())));
 
@@ -412,8 +360,8 @@ public class ClassesHardcore implements ModInitializer {
                 () -> {
                     ModConfig cfg = ModConfig.getInstance();
                     int bonus = cfg.getIntEffect("ice_strike_bonus_damage", 1);
-                    int perStep = cfg.getIntEffect("ice_strike_levels_per_amplifier_step", 30);
-                    int chance = (int) Math.round(cfg.getEffect("ice_deep_freeze_chance", 0.05) * 100);
+                    int perStep = cfg.getIntEffect("ice_strike_levels_per_amplifier_step", 50);
+                    int chance = (int) Math.round(cfg.getEffect("ice_deep_freeze_chance", 0.025) * 100);
                     return "Каждый удар +" + bonus + " урона и Замедление. Каждые " + perStep
                             + " уровней +1 к Замедлению. Замедлённые враги бьют слабее. Шанс "
                             + chance + "% — полная заморозка.";
@@ -502,7 +450,7 @@ public class ClassesHardcore implements ModInitializer {
         ClassRegistry.register(new ClassDefinition("assassin", "Опытный убийца",
                 () -> {
                     ModConfig cfg = ModConfig.getInstance();
-                    double chance = cfg.getEffect("assassin_instakill_chance", 0.003) * 100;
+                    double chance = cfg.getEffect("assassin_instakill_chance", 0.005) * 100;
                     return "С шансом " + String.format("%.1f", chance)
                             + "% мгновенно убивает мобов, накапливая бонус к урону.";
                 },
@@ -510,7 +458,7 @@ public class ClassesHardcore implements ModInitializer {
 
         ClassRegistry.register(new ClassDefinition("titan", "Титан",
                 () -> {
-                    int amp = ModConfig.getInstance().getIntEffect("titan_resistance_amplifier", 1);
+                    int amp = ModConfig.getInstance().getIntEffect("titan_resistance_amplifier", 0);
                     return "Постоянно имеет Сопротивление " + roman(amp + 1)
                             + ". Монолит — временное Сопротивление IV.";
                 },
@@ -549,7 +497,7 @@ public class ClassesHardcore implements ModInitializer {
         ClassRegistry.register(new ClassDefinition("reincarnator", "Реинкарнатор",
                 () -> {
                     int chance = (int) Math.round(
-                            ModConfig.getInstance().getEffect("reincarnator_totem_save_chance", 0.80) * 100);
+                            ModConfig.getInstance().getEffect("reincarnator_totem_save_chance", 0.70) * 100);
                     return "Тотем бессмертия с шансом " + chance + "% не тратится. "
                             + "Запрещена незеритовая броня.";
                 },
@@ -570,10 +518,64 @@ public class ClassesHardcore implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(FarmerSyncPayload.TYPE, FarmerSyncPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(HeroSyncPayload.TYPE, HeroSyncPayload.CODEC);
 
+        // Новые пакеты для меню
+        PayloadTypeRegistry.serverboundPlay().register(RequestClassChangePayload.TYPE, RequestClassChangePayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ClassTokensSyncPayload.TYPE, ClassTokensSyncPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Pick3OptionsPayload.TYPE, Pick3OptionsPayload.CODEC);
+
         ServerPlayNetworking.registerGlobalReceiver(UseAbilityPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 AbilityManager.tryActivate(player, payload.abilityId());
+            });
+        });
+
+        // Обработчик смены класса
+        ServerPlayNetworking.registerGlobalReceiver(RequestClassChangePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                PlayerClassData data = PlayerClassData.get(player);
+
+                if (payload.type() == 0) { // Случайный
+                    if (data.randomChangeTokens > 0) {
+                        data.randomChangeTokens--;
+                        String[] classes = ClassRegistry.getAll().keySet().toArray(new String[0]);
+                        if (classes.length > 0) {
+                            String randomClass = classes[new Random().nextInt(classes.length)];
+                            ClassCommand.applyClass(player, randomClass);
+                            ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+                            player.sendSystemMessage(Component.literal("§aКласс изменён на случайный!"));
+                        }
+                    } else {
+                        player.sendSystemMessage(Component.literal("§cУ вас нет попыток для случайной смены класса."));
+                    }
+                } else if (payload.type() == 1) { // Выбор из 3
+                    if (data.pick3ChangeTokens > 0) {
+                        data.pick3ChangeTokens--;
+                        List<String> allClasses = new ArrayList<>(ClassRegistry.getAll().keySet());
+                        Collections.shuffle(allClasses);
+                        List<String> options = allClasses.subList(0, Math.min(3, allClasses.size()));
+
+                        ServerPlayNetworking.send(player, new Pick3OptionsPayload(options));
+                        ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+                    } else {
+                        player.sendSystemMessage(Component.literal("§cУ вас нет попыток для выбора из 3 классов."));
+                    }
+                } else if (payload.type() == 2) { // Админский
+                    if (player.hasPermissions(2)) {
+                        if (ClassRegistry.get(payload.classId()) != null) {
+                            ClassCommand.applyClass(player, payload.classId());
+                            player.sendSystemMessage(Component.literal("§aКласс изменён на " + payload.classId() + "!"));
+                        }
+                    } else {
+                        player.sendSystemMessage(Component.literal("§cУ вас нет прав на это действие."));
+                    }
+                } else if (payload.type() == 3) { // Подтверждение выбора из 3 (без токена)
+                    if (ClassRegistry.get(payload.classId()) != null) {
+                        ClassCommand.applyClass(player, payload.classId());
+                        player.sendSystemMessage(Component.literal("§aВы выбрали класс: " + payload.classId()));
+                    }
+                }
             });
         });
     }

@@ -48,6 +48,10 @@ public class PlayerClassData {
     public int heroTrades = 0;
     public int heroTradeBaseline = 0;
 
+    // --- Токены смены класса ---
+    public int randomChangeTokens = 0;
+    public int pick3ChangeTokens = 0;
+
     public static PlayerClassData get(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
         if (server == null) return new PlayerClassData();
@@ -114,6 +118,8 @@ public class PlayerClassData {
         tag.putBoolean("climbingInProgress", climbingInProgress);
         tag.putInt("heroTrades", heroTrades);
         tag.putInt("heroTradeBaseline", heroTradeBaseline);
+        tag.putInt("randomChangeTokens", randomChangeTokens);
+        tag.putInt("pick3ChangeTokens", pick3ChangeTokens);
         return tag;
     }
 
@@ -140,6 +146,8 @@ public class PlayerClassData {
         data.climbingInProgress = tag.getBooleanOr("climbingInProgress", false);
         data.heroTrades = tag.getIntOr("heroTrades", 0);
         data.heroTradeBaseline = tag.getIntOr("heroTradeBaseline", 0);
+        data.randomChangeTokens = tag.getIntOr("randomChangeTokens", 0);
+        data.pick3ChangeTokens = tag.getIntOr("pick3ChangeTokens", 0);
         return data;
     }
 }
