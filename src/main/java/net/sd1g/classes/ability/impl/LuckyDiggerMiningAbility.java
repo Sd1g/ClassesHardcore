@@ -70,7 +70,7 @@ public class LuckyDiggerMiningAbility implements Ability {
                 if (dist > 15) amp = minAmp;
                 else if (dist > 5) amp = midAmp;
 
-                target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 40, amp, true, false));
+                target.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, 40, amp, true, false));
             }
         }
 

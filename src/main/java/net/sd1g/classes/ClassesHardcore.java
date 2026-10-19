@@ -9,17 +9,16 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -178,9 +177,7 @@ public class ClassesHardcore implements ModInitializer {
             PorcupineThornsAbility.clearTracking(handler.getPlayer().getUUID());
         });
 
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            ClassStateSaver.get(server).setDirty();
-        });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> ClassStateSaver.get(server).setDirty());
 
         PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
             if (!(player instanceof ServerPlayer serverPlayer)) return;
@@ -212,7 +209,6 @@ public class ClassesHardcore implements ModInitializer {
 
         ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, baseDamage, damageTaken, blocked) -> {
             if (!(source.getEntity() instanceof ServerPlayer attacker)) return;
-            if (!(entity instanceof LivingEntity target)) return;
             if (damageTaken <= 0) return;
 
             PlayerClassData data = PlayerClassData.get(attacker);
@@ -220,7 +216,7 @@ public class ClassesHardcore implements ModInitializer {
             if (def == null) return;
 
             for (Ability ability : def.abilities) {
-                ability.onDealDamage(attacker, target, damageTaken);
+                ability.onDealDamage(attacker, entity, damageTaken);
             }
         });
 
@@ -518,7 +514,6 @@ public class ClassesHardcore implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(FarmerSyncPayload.TYPE, FarmerSyncPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(HeroSyncPayload.TYPE, HeroSyncPayload.CODEC);
 
-        // Новые пакеты для меню
         PayloadTypeRegistry.serverboundPlay().register(RequestClassChangePayload.TYPE, RequestClassChangePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ClassTokensSyncPayload.TYPE, ClassTokensSyncPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Pick3OptionsPayload.TYPE, Pick3OptionsPayload.CODEC);
@@ -530,13 +525,12 @@ public class ClassesHardcore implements ModInitializer {
             });
         });
 
-        // Обработчик смены класса
         ServerPlayNetworking.registerGlobalReceiver(RequestClassChangePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 PlayerClassData data = PlayerClassData.get(player);
 
-                if (payload.type() == 0) { // Случайный
+                if (payload.actionType() == 0) { // Случайный
                     if (data.randomChangeTokens > 0) {
                         data.randomChangeTokens--;
                         String[] classes = ClassRegistry.getAll().keySet().toArray(new String[0]);
@@ -544,15 +538,18 @@ public class ClassesHardcore implements ModInitializer {
                             String randomClass = classes[new Random().nextInt(classes.length)];
                             ClassCommand.applyClass(player, randomClass);
                             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
-                            player.sendSystemMessage(Component.literal("§aКласс изменён на случайный!"));
                         }
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет попыток для случайной смены класса."));
                     }
-                } else if (payload.type() == 1) { // Выбор из 3
+                } else if (payload.actionType() == 1) { // Выбор из 3
                     if (data.pick3ChangeTokens > 0) {
                         data.pick3ChangeTokens--;
                         List<String> allClasses = new ArrayList<>(ClassRegistry.getAll().keySet());
+
+                        // ИСКЛЮЧАЕМ ТЕКУЩИЙ КЛАСС
+                        allClasses.remove(data.playerClass);
+
                         Collections.shuffle(allClasses);
                         List<String> options = allClasses.subList(0, Math.min(3, allClasses.size()));
 
@@ -561,19 +558,17 @@ public class ClassesHardcore implements ModInitializer {
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет попыток для выбора из 3 классов."));
                     }
-                } else if (payload.type() == 2) { // Админский
-                    if (player.hasPermissions(2)) {
+                } else if (payload.actionType() == 2) { // Админский
+                    if (Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(player.createCommandSourceStack())) {
                         if (ClassRegistry.get(payload.classId()) != null) {
                             ClassCommand.applyClass(player, payload.classId());
-                            player.sendSystemMessage(Component.literal("§aКласс изменён на " + payload.classId() + "!"));
                         }
                     } else {
                         player.sendSystemMessage(Component.literal("§cУ вас нет прав на это действие."));
                     }
-                } else if (payload.type() == 3) { // Подтверждение выбора из 3 (без токена)
+                } else if (payload.actionType() == 3) { // Подтверждение выбора из 3
                     if (ClassRegistry.get(payload.classId()) != null) {
                         ClassCommand.applyClass(player, payload.classId());
-                        player.sendSystemMessage(Component.literal("§aВы выбрали класс: " + payload.classId()));
                     }
                 }
             });
