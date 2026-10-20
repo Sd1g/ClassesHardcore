@@ -23,7 +23,8 @@
     "ExplosionDamageMixin",
     "FarmerDamageMixin",
     "BruteAnvilMixin",
-    "ItemCombinerMenuAccessor"
+    "ItemCombinerMenuAccessor",
+    "DodgerDodgeMixin"
   ],
   "client": [],
   "injectors": {

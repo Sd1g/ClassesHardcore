@@ -294,38 +294,11 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(attacker, new FarmerSyncPayload(data.farmerMobKills, data.farmerPlayerKills));
         });
 
+        // ИСПРАВЛЕНИЕ: Удален весь лишний код Дикобраза и Ловкача.
+        // Урон Дикобраза режется в PorcupineChitinMixin, а уклонение Ловкача в DodgerDodgeMixin.
+        // Мы оставляем ALLOW_DAMAGE только на случай, если в будущем понадобится вернуть какую-то логику.
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
-            if (!(entity instanceof ServerPlayer sp)) return true;
-            if (amount <= 0) return true;
-            if (source.getEntity() == null) return true;
-            if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return true;
-
-            PlayerClassData data = PlayerClassData.get(sp);
-
-            if ("porcupine".equals(data.playerClass)) {
-                return amount * 0.8f > 0;
-            }
-
-            if (!"dodger".equals(data.playerClass)) return true;
-
-            ModConfig cfg = ModConfig.getInstance();
-            double baseChance = cfg.getEffect("dodger_dodge_chance", 0.20);
-            int killsPerStep = cfg.getIntEffect("dodger_kills_per_step", 300);
-            double maxBonus = cfg.getEffect("dodger_max_bonus_chance", 0.10);
-
-            double bonus = Math.min((data.dodgerDodgeCount / (double)killsPerStep) * 0.01, maxBonus);
-            double totalChance = baseChance + bonus;
-
-            if (sp.getRandom().nextDouble() >= totalChance) return true;
-
-            DodgerAbility.playDodgeEffect(sp);
-            data.dodgerDodgeCount++;
-            PlayerClassData.markDirty(sp);
-
-            ServerPlayNetworking.send(sp, new CooldownSyncPayload("dodger_dodges", data.dodgerDodgeCount));
-
-            if (amount >= 2.0f) sp.sendOverlayMessage(Component.literal("§bУклонение!§f Урон от атаки избежан."));
-            return false;
+            return true;
         });
 
         LOGGER.info("ClassesHardcore initialized successfully!");
@@ -387,8 +360,6 @@ public class ClassesHardcore implements ModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(RequestClassChangePayload.TYPE, RequestClassChangePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ClassTokensSyncPayload.TYPE, ClassTokensSyncPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Pick3OptionsPayload.TYPE, Pick3OptionsPayload.CODEC);
-
-        // НОВЫЙ ПАКЕТ КОНФИГА
         PayloadTypeRegistry.clientboundPlay().register(SyncConfigPayload.TYPE, SyncConfigPayload.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UseAbilityPayload.TYPE, (payload, context) -> {

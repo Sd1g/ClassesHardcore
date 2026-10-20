@@ -13,14 +13,6 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.Random;
 
-/**
- * Класс «Реинкарнатор» — с шансом 80% тотем бессмертия не тратится.
- * <p>Перехватывает момент расхода тотема внутри метода
- * checkTotemDeathProtection (приватный метод LivingEntity).
- * В разных версиях MC расход реализован либо через ItemStack.shrink(int),
- * либо через ItemStack.consume(int, LivingEntity) — поэтому
- * делаем два редиректа, оба с require = 0 (не падать, если один не совпал).
- */
 @Mixin(LivingEntity.class)
 public class TotemRetentionMixin {
 
@@ -28,10 +20,7 @@ public class TotemRetentionMixin {
 
     @Redirect(
             method = "checkTotemDeathProtection",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/item/ItemStack;shrink(I)V"
-            ),
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;shrink(I)V"),
             require = 0
     )
     private void classeshardcore$keepTotemShrink(ItemStack stack, int amount) {
@@ -41,10 +30,7 @@ public class TotemRetentionMixin {
 
     @Redirect(
             method = "checkTotemDeathProtection",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/item/ItemStack;consume(ILnet/minecraft/world/entity/LivingEntity;)V"
-            ),
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;consume(ILnet/minecraft/world/entity/LivingEntity;)V"),
             require = 0
     )
     private void classeshardcore$keepTotemConsume(ItemStack stack, int amount, LivingEntity entity) {
@@ -59,10 +45,20 @@ public class TotemRetentionMixin {
         PlayerClassData data = PlayerClassData.get(sp);
         if (!"reincarnator".equals(data.playerClass)) return false;
 
-        double chance = ModConfig.getInstance().getEffect("reincarnator_totem_save_chance", 0.80);
+        // Если уже сохранили 10 раз подряд - тратим тотем
+        if (data.reincarnatorTotemSaves >= 10) {
+            data.reincarnatorTotemSaves = 0; // сбрасываем счетчик
+            PlayerClassData.markDirty(sp);
+            return false;
+        }
+
+        double chance = ModConfig.getInstance().getEffect("reincarnator_totem_save_chance", 0.70);
         if (CLASSES_RNG.nextDouble() >= chance) return false;
 
-        sp.sendOverlayMessage(Component.literal("§dРеинкарнация. §fТотем сохранён."));
+        // Сохраняем тотем и увеличиваем счетчик
+        data.reincarnatorTotemSaves++;
+        PlayerClassData.markDirty(sp);
+        sp.sendOverlayMessage(Component.literal("§dРеинкарнация. §fТотем сохранён. §7(Сохранений подряд: " + data.reincarnatorTotemSaves + "/10)"));
         return true;
     }
 }

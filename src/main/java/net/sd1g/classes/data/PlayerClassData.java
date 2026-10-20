@@ -44,7 +44,7 @@ public class PlayerClassData {
     public boolean climbingActive = false;
     public boolean climbingInProgress = false;
     public int stuntmanClimbedBlocks = 0;
-    public double stuntmanClimbAccumulator = 0.0; // НОВОЕ ПОЛЕ
+    public double stuntmanClimbAccumulator = 0.0;
 
     // --- Герой ---
     public int heroTrades = 0;
@@ -64,6 +64,9 @@ public class PlayerClassData {
     // --- Кристаллы Энда (Игровые тики) ---
     public int endCrystalUses = 0;
     public long crystalCooldownEndTick = 0;
+
+    // --- Реинкарнатор ---
+    public int reincarnatorTotemSaves = 0; // НОВОЕ ПОЛЕ
 
     public static PlayerClassData get(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
@@ -130,7 +133,7 @@ public class PlayerClassData {
         tag.putBoolean("climbingActive", climbingActive);
         tag.putBoolean("climbingInProgress", climbingInProgress);
         tag.putInt("stuntmanClimbedBlocks", stuntmanClimbedBlocks);
-        tag.putDouble("stuntmanClimbAccumulator", stuntmanClimbAccumulator); // СОХРАНЕНИЕ
+        tag.putDouble("stuntmanClimbAccumulator", stuntmanClimbAccumulator);
         tag.putInt("heroTrades", heroTrades);
         tag.putInt("heroTradeBaseline", heroTradeBaseline);
         tag.putInt("randomChangeTokens", randomChangeTokens);
@@ -143,6 +146,9 @@ public class PlayerClassData {
         tag.putInt("dodgerDodgeCount", dodgerDodgeCount);
         tag.putInt("endCrystalUses", endCrystalUses);
         tag.putLong("crystalCooldownEndTick", crystalCooldownEndTick);
+
+        // СОХРАНЕНИЕ НОВОГО ПОЛЯ
+        tag.putInt("reincarnatorTotemSaves", reincarnatorTotemSaves);
 
         return tag;
     }
@@ -169,7 +175,7 @@ public class PlayerClassData {
         data.climbingActive = tag.getBooleanOr("climbingActive", false);
         data.climbingInProgress = tag.getBooleanOr("climbingInProgress", false);
         data.stuntmanClimbedBlocks = tag.getIntOr("stuntmanClimbedBlocks", 0);
-        data.stuntmanClimbAccumulator = tag.getDoubleOr("stuntmanClimbAccumulator", 0.0); // ЗАГРУЗКА
+        data.stuntmanClimbAccumulator = tag.getDoubleOr("stuntmanClimbAccumulator", 0.0);
         data.heroTrades = tag.getIntOr("heroTrades", 0);
         data.heroTradeBaseline = tag.getIntOr("heroTradeBaseline", 0);
         data.randomChangeTokens = tag.getIntOr("randomChangeTokens", 0);
@@ -182,6 +188,9 @@ public class PlayerClassData {
         data.dodgerDodgeCount = tag.getIntOr("dodgerDodgeCount", 0);
         data.endCrystalUses = tag.getIntOr("endCrystalUses", 0);
         data.crystalCooldownEndTick = tag.getLongOr("crystalCooldownEndTick", 0);
+
+        // ЗАГРУЗКА НОВОГО ПОЛЯ
+        data.reincarnatorTotemSaves = tag.getIntOr("reincarnatorTotemSaves", 0);
 
         return data;
     }

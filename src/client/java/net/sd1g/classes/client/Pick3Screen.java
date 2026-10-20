@@ -33,7 +33,6 @@ public class Pick3Screen extends Screen {
     private Button warningYesButton;
     private Button warningNoButton;
 
-    // Кэш текста
     private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
     private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
@@ -305,10 +304,11 @@ public class Pick3Screen extends Screen {
     private static int[] getTextureSize(Identifier icon) {
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
-                var resource = Minecraft.getInstance().getResourceManager().getResource(id);
+                // ИСПРАВЛЕНИЕ: Динамически добавляем textures/ и .png для чтения файла
+                Identifier actualPath = Identifier.fromNamespaceAndPath(id.getNamespace(), "textures/" + id.getPath() + ".png");
+                var resource = Minecraft.getInstance().getResourceManager().getResource(actualPath);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    // ИСПОЛЬЗУЕМ NativeImage
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
                     int h = img.getHeight();

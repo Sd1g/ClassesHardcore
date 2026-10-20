@@ -352,7 +352,9 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         if (icon == null) return new int[]{0, 0};
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
-                var resource = Minecraft.getInstance().getResourceManager().getResource(id);
+                // ИСПРАВЛЕНИЕ: Динамически добавляем textures/ и .png для чтения файла
+                Identifier actualPath = Identifier.fromNamespaceAndPath(id.getNamespace(), "textures/" + id.getPath() + ".png");
+                var resource = Minecraft.getInstance().getResourceManager().getResource(actualPath);
                 if (resource.isEmpty()) return new int[]{0, 0};
                 try (var stream = resource.get().open()) {
                     NativeImage img = NativeImage.read(stream);
@@ -431,7 +433,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         abilityListCache.clear();
 
         if (def != null) {
-            // Сортировка: сначала активные, потом пассивные
             List<Ability> sortedAbilities = new ArrayList<>();
             for (Ability a : def.abilities) {
                 if (!a.isPassive()) sortedAbilities.add(a);

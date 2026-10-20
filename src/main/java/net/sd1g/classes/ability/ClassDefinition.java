@@ -11,25 +11,21 @@ public class ClassDefinition {
     public final List<Ability> abilities;
     public final Identifier icon;
 
-    /** Лямбда, возвращающая описание. Читает ModConfig при каждом вызове. */
     private final Supplier<String> descriptionSupplier;
 
-    /** Конструктор со статическим описанием (для классов без чисел). */
     public ClassDefinition(String id, String displayName, String description, List<Ability> abilities) {
         this(id, displayName, () -> description, abilities);
     }
 
-    /** Конструктор с динамическим описанием. */
     public ClassDefinition(String id, String displayName, Supplier<String> descriptionSupplier, List<Ability> abilities) {
         this.id = id;
         this.displayName = displayName;
         this.descriptionSupplier = descriptionSupplier;
         this.abilities = abilities;
-        this.icon = Identifier.fromNamespaceAndPath("classeshardcore",
-                "textures/gui/sprites/class/" + id + ".png");
+        // ИСПРАВЛЕНИЕ: Убран префикс "textures/" и расширение ".png"
+        this.icon = Identifier.fromNamespaceAndPath("classeshardcore", "gui/sprites/class/" + id);
     }
 
-    /** Динамическое описание — пересчитывается при каждом вызове тултипа. */
     public String getDescription() {
         return descriptionSupplier.get();
     }

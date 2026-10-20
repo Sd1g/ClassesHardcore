@@ -14,8 +14,7 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": ["net.sd1g.classes.ClassesHardcore"],
-		"client": ["net.sd1g.classes.client.ClassesHardcoreClient"],
-		"fabric-datagen": ["net.sd1g.classes.client.ClassesHardcoreDataGenerator"]
+		"client": ["net.sd1g.classes.client.ClassesHardcoreClient"]
 	},
 	"mixins": [
 		"classeshardcore.mixins.json"

@@ -26,10 +26,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private final Screen parent;
     private ClassDefinition selectedClass = null;
 
-    // Кэш для списка классов
     private List<ClassDefinition> allClasses = new ArrayList<>();
-
-    // Кэш для разбитого текста
     private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
     private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
@@ -63,8 +60,6 @@ public class ClassesHardcoreMenuScreen extends Screen {
         this.mainContentHeight = this.height - mainContentY - 40;
 
         this.columnWidth = (leftPanelWidth - PADDING * 2) / COLUMNS;
-
-        // Загружаем список классов ОДИН РАЗ при открытии
         this.allClasses = new ArrayList<>(ClassRegistry.getAll().values());
 
         if (selectedClass == null && !allClasses.isEmpty()) {
@@ -243,10 +238,11 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private static int[] getTextureSize(Identifier icon) {
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
-                var resource = Minecraft.getInstance().getResourceManager().getResource(id);
+                // ИСПРАВЛЕНИЕ: Динамически добавляем textures/ и .png для чтения файла
+                Identifier actualPath = Identifier.fromNamespaceAndPath(id.getNamespace(), "textures/" + id.getPath() + ".png");
+                var resource = Minecraft.getInstance().getResourceManager().getResource(actualPath);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    // ИСПОЛЬЗУЕМ NativeImage ВМЕСТО МЕДЛЕННОГО ImageIO
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
                     int h = img.getHeight();
@@ -274,7 +270,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
                 if (mouseX >= x && mouseX <= x + columnWidth - ITEM_SPACING && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
                     if (selectedClass != def) {
                         selectedClass = def;
-                        updateCachedText(); // Обновляем кэш при смене класса
+                        updateCachedText();
                     }
                     return true;
                 }

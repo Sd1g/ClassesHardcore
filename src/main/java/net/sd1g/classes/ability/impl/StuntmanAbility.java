@@ -4,8 +4,6 @@ import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
@@ -13,8 +11,6 @@ import net.sd1g.classes.config.ModConfig;
 import java.util.List;
 
 public class StuntmanAbility implements Ability {
-    private static boolean firstTime = true;
-
     @Override public String getId() { return "fall_resistance"; }
     @Override public String getDisplayName() { return "Страховка"; }
     @Override public boolean isPassive() { return true; }
