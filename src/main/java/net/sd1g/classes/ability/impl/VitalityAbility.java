@@ -8,6 +8,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -20,26 +21,26 @@ public class VitalityAbility implements Ability {
     @Override public int getBaseCooldown() { return 0; }
 
     @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/bonus_health"); }
-
-    @Override
     public String getDescription() {
-        return "Максимальное здоровье увеличено на 5 НР.";
+        int bonus = (int) ModConfig.getInstance().getEffect("vitality_bonus_hp", 5.0);
+        return "Максимальное здоровье увеличено на " + bonus + " НР.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        return List.of("§7Бонус HP: §c+5");
+        int bonus = (int) ModConfig.getInstance().getEffect("vitality_bonus_hp", 5.0);
+        return List.of("§7Бонус HP: §c+" + bonus);
     }
 
     @Override
     public void onPassiveTick(ServerPlayer player) {
+        double bonus = ModConfig.getInstance().getEffect("vitality_bonus_hp", 5.0);
         AttributeInstance attr = player.getAttribute(Attributes.MAX_HEALTH);
         if (attr == null) return;
 
         AttributeModifier existing = attr.getModifier(MODIFIER_ID);
-        if (existing == null || (int) existing.amount() != 5) {
-            attr.addOrUpdateTransientModifier(new AttributeModifier(MODIFIER_ID, 5.0, AttributeModifier.Operation.ADD_VALUE));
+        if (existing == null || Math.abs(existing.amount() - bonus) > 1e-6) {
+            attr.addOrUpdateTransientModifier(new AttributeModifier(MODIFIER_ID, bonus, AttributeModifier.Operation.ADD_VALUE));
         }
     }
 

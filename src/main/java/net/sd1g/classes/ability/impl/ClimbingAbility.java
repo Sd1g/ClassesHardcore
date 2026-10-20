@@ -3,19 +3,15 @@ package net.sd1g.classes.ability.impl;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.state.BlockState;
-import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.CooldownSyncPayload;
 
@@ -25,14 +21,16 @@ public class ClimbingAbility implements Ability {
     @Override public String getId() { return "climbing_toggle"; }
     @Override public String getDisplayName() { return "Сцепление"; }
     @Override public boolean isPassive() { return false; }
-    @Override public int getBaseCooldown() { return 100; } // 5 сек
 
     @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/climbing_toggle"); }
+    public int getBaseCooldown() {
+        return ModConfig.getInstance().getCooldown("climbing_toggle", 100);
+    }
 
     @Override
     public String getDescription() {
-        return "Включает или выключает возможность карабкаться по вертикальным стенам.";
+        int cd = ModConfig.getInstance().getCooldown("climbing_toggle", 100) / 20;
+        return "Включает/выключает возможность карабкаться по стенам. Базовая перезарядка: " + cd + " сек. (растет от прогрессии)";
     }
 
     @Override
@@ -44,9 +42,14 @@ public class ClimbingAbility implements Ability {
 
     @Override
     public int getDynamicCooldown(ServerPlayer player) {
+        ModConfig cfg = ModConfig.getInstance();
         PlayerClassData data = PlayerClassData.get(player);
-        int bonusTicks = Math.min((data.stuntmanClimbedBlocks / 500) * 20, 100);
-        return 100 + bonusTicks; // От 5 до 10 сек
+        int blocksPerStep = cfg.getIntEffect("stuntman_master_blocks_per_step", 500);
+        int maxSteps = cfg.getIntEffect("stuntman_master_max_steps", 5);
+        int bonusCooldown = cfg.getIntEffect("stuntman_master_cooldown_reduction", 20);
+
+        int extraCd = Math.min((data.stuntmanClimbedBlocks / blocksPerStep) * bonusCooldown, maxSteps * bonusCooldown);
+        return getBaseCooldown() + extraCd;
     }
 
     @Override
@@ -56,13 +59,10 @@ public class ClimbingAbility implements Ability {
         data.climbingInProgress = false;
         PlayerClassData.markDirty(player);
 
-        ServerLevel level = player.level();
         if (data.climbingActive) {
-            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ARMOR_EQUIP_LEATHER, SoundSource.PLAYERS, 1.3f, 1.5f);
             player.sendOverlayMessage(Component.literal("§aСцепление включено."));
         } else {
             player.removeEffect(MobEffects.LEVITATION);
-            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ARMOR_EQUIP_LEATHER, SoundSource.PLAYERS, 1.0f, 0.9f);
             player.sendOverlayMessage(Component.literal("§7Сцепление выключено."));
         }
         return true;
@@ -99,7 +99,6 @@ public class ClimbingAbility implements Ability {
             player.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 5, 1, true, false, false));
             player.resetFallDistance();
 
-            // СЧЕТЧИК БЛОКОВ ЛАЗАНИЯ (через deltaMovement)
             double dy = player.getDeltaMovement().y;
             if (dy > 0) {
                 data.stuntmanClimbAccumulator += dy;
@@ -108,13 +107,8 @@ public class ClimbingAbility implements Ability {
                     data.stuntmanClimbedBlocks += blocks;
                     data.stuntmanClimbAccumulator -= blocks;
                     PlayerClassData.markDirty(player);
-
                     ServerPlayNetworking.send(player, new CooldownSyncPayload("stuntman_blocks", data.stuntmanClimbedBlocks));
                 }
-            }
-
-            if (player.tickCount % 4 == 0) {
-                level.sendParticles(ParticleTypes.CRIT, player.getX(), player.getY() + 0.5, player.getZ(), 2, 0.2, 0.2, 0.2, 0.02);
             }
         } else {
             data.climbingInProgress = false;

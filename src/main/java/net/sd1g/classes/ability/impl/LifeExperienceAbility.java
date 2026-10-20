@@ -8,6 +8,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -20,23 +21,39 @@ public class LifeExperienceAbility implements Ability {
     @Override public int getBaseCooldown() { return 0; }
 
     @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/life_experience"); }
-
-    @Override
     public String getDescription() {
-        return "За каждые 5 уровней опыта максимальное здоровье увеличивается на 1 НР.";
+        ModConfig cfg = ModConfig.getInstance();
+        int per = cfg.getIntEffect("life_exp_levels_per_point", 5);
+        double hp = cfg.getEffect("life_exp_bonus_hp_per_point", 1.0);
+        return "За каждые " + per + " уровней опыта +" + hp + " НР к максимуму.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        int bonus = player.experienceLevel / 5;
-        int toNext = 5 - (player.experienceLevel % 5);
-        return List.of("§7Текущий бонус: §c+" + bonus + " HP", "§7До след. шага: §f" + toNext + " ур.");
+        ModConfig cfg = ModConfig.getInstance();
+        int per = cfg.getIntEffect("life_exp_levels_per_point", 5);
+        double hpPerPoint = cfg.getEffect("life_exp_bonus_hp_per_point", 1.0);
+
+        int level = player.experienceLevel;
+        int points = per > 0 ? level / per : 0;
+        double bonus = points * hpPerPoint;
+        int toNext = per > 0 ? per - (level % per) : 0;
+
+        return List.of(
+                "§7Текущий бонус: §c+" + bonus + " HP",
+                "§7До следующего шага: §f" + toNext + " ур."
+        );
     }
 
     @Override
     public void onPassiveTick(ServerPlayer player) {
-        double targetBonus = player.experienceLevel / 5.0;
+        ModConfig cfg = ModConfig.getInstance();
+        int per = cfg.getIntEffect("life_exp_levels_per_point", 5);
+        double hpPerPoint = cfg.getEffect("life_exp_bonus_hp_per_point", 1.0);
+
+        int points = per > 0 ? player.experienceLevel / per : 0;
+        double targetBonus = points * hpPerPoint;
+
         AttributeInstance attr = player.getAttribute(Attributes.MAX_HEALTH);
         if (attr == null) return;
 

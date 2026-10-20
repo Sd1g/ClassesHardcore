@@ -18,10 +18,12 @@ import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
+import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.ClassSyncPayload;
 import net.sd1g.classes.network.ClassTokensSyncPayload;
 import net.sd1g.classes.network.CooldownSyncPayload;
+import net.sd1g.classes.network.SyncConfigPayload;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -83,7 +85,6 @@ public class ClassCommand {
                             }
                             return 1;
                         }))
-                // === ВОЗВРАЩЕННАЯ КОМАНДА СБРОСА КУЛДАУНОВ ===
                 .then(Commands.literal("resetcd")
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> {
@@ -94,7 +95,6 @@ public class ClassCommand {
                                     return 1;
                                 }))
                         .executes(ctx -> {
-                            // Если игрок не указан, сбрасываем кулдаун тому, кто ввел команду
                             if (ctx.getSource().getEntity() instanceof ServerPlayer player) {
                                 resetCooldowns(player);
                                 ctx.getSource().sendSuccess(() -> Component.literal("Ваши кулдауны сброшены."), false);
@@ -102,6 +102,19 @@ public class ClassCommand {
                             }
                             ctx.getSource().sendFailure(Component.literal("Укажите игрока: /class resetcd <player>"));
                             return 0;
+                        }))
+                .then(Commands.literal("reload")
+                        .executes(ctx -> {
+                            ModConfig.load(); // Читаем с диска
+                            String json = ModConfig.getJson();
+
+                            // Рассылаем всем игрокам
+                            for (ServerPlayer p : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+                                ServerPlayNetworking.send(p, new SyncConfigPayload(json));
+                            }
+
+                            ctx.getSource().sendSuccess(() -> Component.literal("§aКонфиг перезагружен и синхронизирован."), true);
+                            return 1;
                         }))
                 .then(Commands.literal("token")
                         .then(Commands.argument("player", EntityArgument.player())
@@ -155,17 +168,11 @@ public class ClassCommand {
 
     private static void resetCooldowns(ServerPlayer target) {
         PlayerClassData data = PlayerClassData.get(target);
-
-        // Очищаем кулдауны способностей
         data.abilityCooldowns.clear();
-
-        // Сбрасываем кулдаун кристаллов
         data.crystalCooldownEndTick = 0;
         data.endCrystalUses = 0;
-
         PlayerClassData.markDirty(target);
 
-        // Синхронизируем с клиентом, чтобы HUD сразу обновился
         ClassDefinition def = data.getClassDef();
         if (def != null) {
             for (Ability a : def.abilities) {
@@ -175,13 +182,16 @@ public class ClassCommand {
         ServerPlayNetworking.send(target, new CooldownSyncPayload("end_crystal", 0));
         ServerPlayNetworking.send(target, new CooldownSyncPayload("teleport", 0));
         ServerPlayNetworking.send(target, new CooldownSyncPayload("teleporter_count", data.teleporterCount));
+        ServerPlayNetworking.send(target, new CooldownSyncPayload("stuntman_blocks", data.stuntmanClimbedBlocks));
+        ServerPlayNetworking.send(target, new CooldownSyncPayload("porcupine_hits", data.porcupineHitsTaken));
+        ServerPlayNetworking.send(target, new CooldownSyncPayload("archer_kills", data.archerBowKills));
+        ServerPlayNetworking.send(target, new CooldownSyncPayload("warrior_kills", data.warriorSwordKills));
     }
 
     public static void applyClass(ServerPlayer player, String newClassId) {
         PlayerClassData data = PlayerClassData.get(player);
         String oldClassId = data.playerClass;
 
-        // 1. Принудительно снимаем базовые эффекты
         player.removeEffect(MobEffects.SPEED);
         player.removeEffect(MobEffects.HASTE);
         player.removeEffect(MobEffects.ABSORPTION);
@@ -190,7 +200,6 @@ public class ClassCommand {
         player.removeEffect(MobEffects.LUCK);
         player.removeEffect(MobEffects.RESISTANCE);
 
-        // 2. Вычищаем ВСЕ атрибуты (сердца, урон, скорость), которые наложил наш мод
         removeMods(player, Attributes.MAX_HEALTH);
         removeMods(player, Attributes.ATTACK_DAMAGE);
         removeMods(player, Attributes.ATTACK_SPEED);
@@ -198,7 +207,6 @@ public class ClassCommand {
         removeMods(player, Attributes.ARMOR);
         removeMods(player, Attributes.ARMOR_TOUGHNESS);
 
-        // 3. Даем способностям старого класса очистить свои внутренние стейты
         ClassDefinition oldDef = ClassRegistry.get(oldClassId);
         if (oldDef != null) {
             for (Ability ability : oldDef.abilities) {
@@ -206,11 +214,9 @@ public class ClassCommand {
             }
         }
 
-        // 4. Устанавливаем новый класс
         data.setPlayerClass(newClassId);
         PlayerClassData.markDirty(player);
 
-        // 5. Синхронизация с клиентом
         ServerPlayNetworking.send(player, new ClassSyncPayload(newClassId));
 
         ClassDefinition def = ClassRegistry.get(newClassId);
@@ -218,7 +224,6 @@ public class ClassCommand {
         player.sendOverlayMessage(Component.literal("§aКласс изменён: §f" + displayName));
     }
 
-    // Вспомогательный метод для удаления модификаторов (исправляет ошибку Holder)
     private static void removeMods(ServerPlayer player, Holder<Attribute> attrHolder) {
         AttributeInstance inst = player.getAttribute(attrHolder);
         if (inst != null) {

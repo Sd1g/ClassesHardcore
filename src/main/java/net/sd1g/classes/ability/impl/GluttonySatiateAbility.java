@@ -1,15 +1,10 @@
 package net.sd1g.classes.ability.impl;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
-import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -17,33 +12,34 @@ public class GluttonySatiateAbility implements Ability {
     @Override public String getId() { return "satiate"; }
     @Override public String getDisplayName() { return "Утоление"; }
     @Override public boolean isPassive() { return false; }
-    @Override public int getBaseCooldown() { return 600; } // 30 сек
 
     @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/satiate"); }
+    public int getBaseCooldown() {
+        return ModConfig.getInstance().getCooldown("satiate", 600);
+    }
 
     @Override
     public String getDescription() {
-        return "Мгновенно восстанавливает 4 единицы сытости. Перезарядка: 30 сек.";
+        int amount = ModConfig.getInstance().getIntEffect("satiate_food_amount", 4);
+        int cd = ModConfig.getInstance().getCooldown("satiate", 600) / 20;
+        return "Восстанавливает " + amount + " единицы сытости. Перезарядка: " + cd + " сек.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        return List.of("§7Сытость: §a+4");
+        int amount = ModConfig.getInstance().getIntEffect("satiate_food_amount", 4);
+        return List.of("§7Сытость: §a+" + amount);
     }
 
     @Override
     public boolean onActivate(ServerPlayer player) {
+        int amount = ModConfig.getInstance().getIntEffect("satiate_food_amount", 4);
         var foodData = player.getFoodData();
-        int newLevel = Math.min(20, foodData.getFoodLevel() + 4);
+        int newLevel = Math.min(20, foodData.getFoodLevel() + amount);
         foodData.setFoodLevel(newLevel);
-        foodData.setSaturation(Math.min(foodData.getSaturationLevel() + 4, newLevel));
+        foodData.setSaturation(Math.min(foodData.getSaturationLevel() + amount, newLevel));
 
-        ServerLevel level = player.level();
-        level.sendParticles(ParticleTypes.HAPPY_VILLAGER, player.getX(), player.getY() + 1.0, player.getZ(), 20, 0.6, 0.5, 0.6, 0.06);
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.GENERIC_EAT, SoundSource.PLAYERS, 1.3f, 1.3f);
-
-        player.sendOverlayMessage(Component.literal("§6Утоление. §f+4 сытости."));
+        player.sendOverlayMessage(Component.literal("§6Утоление. §f+" + amount + " сытости."));
         return true;
     }
 }

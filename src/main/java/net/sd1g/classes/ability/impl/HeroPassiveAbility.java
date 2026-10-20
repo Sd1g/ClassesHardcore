@@ -13,10 +13,13 @@ import net.minecraft.stats.Stats;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.HeroSyncPayload;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class HeroPassiveAbility implements Ability {
@@ -25,30 +28,38 @@ public class HeroPassiveAbility implements Ability {
     @Override public boolean isPassive() { return true; }
     @Override public int getBaseCooldown() { return 0; }
 
-    private static int computeAmplifier(int trades) {
-        return Math.min(9, trades / 50);
-    }
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/hero_aura"); }
 
     @Override
     public String getDescription() {
-        return "Постоянно даёт «Герой деревни». Каждые 50 сделок — +1 уровень. Максимум X.";
+        return "Постоянно даёт «Герой деревни I». Каждые 50 сделок повышают уровень эффекта на 1 (максимум X).";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        int trades = net.sd1g.classes.data.AbilityClientState.heroTrades;
-        int amp = computeAmplifier(trades);
-        return List.of(
-                "§7Эффект: §bГерой деревни " + toRoman(amp + 1),
-                "§7Сделок: §f" + trades
-        );
+        int trades = AbilityClientState.heroTrades;
+        int amp = Math.min(trades / 50, 9);
+        int toNext = 50 - (trades % 50);
+        if (trades >= 500) toNext = 0;
+
+        List<String> lines = new ArrayList<>();
+        lines.add("§7Эффект: §bГерой деревни " + toRoman(amp + 1));
+        lines.add("§7Сделок: §f" + trades);
+
+        if (toNext > 0) {
+            lines.add("§7До след. уровня: §f" + toNext + " сделок");
+        } else {
+            lines.add("§7Максимальный уровень достигнут");
+        }
+
+        return lines;
     }
 
     @Override
     public void onPassiveTick(ServerPlayer player) {
         PlayerClassData data = PlayerClassData.get(player);
 
-        // Синхронизация счётчика
         int currentStat;
         try {
             Stat<Identifier> stat = Stats.CUSTOM.get(Stats.TRADED_WITH_VILLAGER);
@@ -58,8 +69,7 @@ public class HeroPassiveAbility implements Ability {
         }
         int delta = Math.max(0, currentStat - data.heroTradeBaseline);
 
-        int oldAmp = computeAmplifier(data.heroTrades);
-        int newAmp = computeAmplifier(delta);
+        int newAmp = Math.min(delta / 50, 9);
 
         if (delta != data.heroTrades) {
             data.heroTrades = delta;
@@ -70,71 +80,16 @@ public class HeroPassiveAbility implements Ability {
         MobEffectInstance current = player.getEffect(MobEffects.HERO_OF_THE_VILLAGE);
         boolean wasAbsent = current == null;
         boolean wrongAmp = current != null && current.getAmplifier() != newAmp;
-        boolean lowDuration = current != null && current.getDuration() < 40;
-        boolean needsRefresh = wasAbsent || wrongAmp || lowDuration;
 
-        // Повышение уровня — событийный звук + вспышка
-        if (newAmp > oldAmp && !wasAbsent) {
-            ServerLevel level = player.level();
-            double x = player.getX();
-            double y = player.getY() + 1.0;
-            double z = player.getZ();
-
-            level.playSound(null, x, y, z, SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.5f, 1.0f);
-            level.playSound(null, x, y, z, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.5f, 1.5f);
-
-            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 40, 0.6, 0.8, 0.6, 0.4);
-            level.sendParticles(new DustParticleOptions(0xFFD91A, 1.8f), x, y, z, 30, 0.6, 0.6, 0.6, 0.15);
-            level.sendParticles(ParticleTypes.ENCHANT, x, y + 0.3, z, 25, 0.8, 0.5, 0.8, 0.4);
+        if (wasAbsent || wrongAmp || (current != null && current.getDuration() < 40)) {
+            player.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, 100, newAmp, true, false));
         }
 
-        if (needsRefresh) {
-            player.addEffect(new MobEffectInstance(
-                    MobEffects.HERO_OF_THE_VILLAGE, 100, newAmp, true, false));
-        }
-
-        // Звук только при первой выдаче эффекта (был отсутствовал)
-        if (wasAbsent) {
-            ServerLevel level = player.level();
-            double x = player.getX();
-            double y = player.getY() + 1.0;
-            double z = player.getZ();
-            level.playSound(null, x, y, z, SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 0.9f, 1.3f);
-        }
-
-        ServerLevel level = player.level();
-        double x = player.getX();
-        double y = player.getY();
-        double z = player.getZ();
-
-        // Зелёная пыль жителей вокруг — раз в 8 тиков
-        if (player.tickCount % 8 == 0) {
-            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y + 0.5, z, 4, 0.6, 0.5, 0.6, 0.05);
-        }
-        // Золотая спираль — восходит, раз в 12 тиков
         if (player.tickCount % 12 == 0) {
-            double angle = (player.tickCount * 0.3) % (Math.PI * 2);
-            for (int i = 0; i < 3; i++) {
-                double dy = 0.3 + i * 0.5;
-                double r = 0.6 + i * 0.15;
-                double px = x + Math.cos(angle + i) * r;
-                double pz = z + Math.sin(angle + i) * r;
-                level.sendParticles(new DustParticleOptions(0xFFD91A, 1.0f),
-                        px, y + dy, pz, 1, 0, 0.02, 0, 0);
-            }
+            ServerLevel level = player.level();
+            level.sendParticles(new DustParticleOptions(0xFFD91A, 1.0f),
+                    player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.5, 0.5, 0.05);
         }
-        // Искры опыта высоко над головой — раз в 20 тиков
-        if (player.tickCount % 20 == 0) {
-            level.sendParticles(ParticleTypes.ENCHANT, x, y + 1.6, z, 4, 0.6, 0.3, 0.6, 0.2);
-        }
-        // Редкие TOTEM_OF_UNDYING — «присутствие героя»
-        if (player.tickCount % 60 == 0) {
-            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y + 1.2, z, 2, 0.4, 0.3, 0.4, 0.05);
-        }
-    }
-
-    public static void removeEffects(ServerPlayer player) {
-        player.removeEffect(MobEffects.HERO_OF_THE_VILLAGE);
     }
 
     private static String toRoman(int n) {

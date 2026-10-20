@@ -1,11 +1,8 @@
 package net.sd1g.classes.ability.impl;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -15,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.InvisibilitySyncPayload;
@@ -26,14 +24,21 @@ public class InvisibilityAbility implements Ability {
     @Override public String getId() { return "invisibility"; }
     @Override public String getDisplayName() { return "Невидимость"; }
     @Override public boolean isPassive() { return false; }
-    @Override public int getBaseCooldown() { return 1200; } // 60 сек
+
+    @Override
+    public int getBaseCooldown() {
+        return ModConfig.getInstance().getCooldown("invisibility", 1200);
+    }
 
     @Override
     public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/invisibility"); }
 
     @Override
     public String getDescription() {
-        return "На 5 секунд становится невидимым. Первый удар из невидимости наносит на 200% больше урона + 1 НР чистым уроном и раскрывает игрока.";
+        ModConfig cfg = ModConfig.getInstance();
+        int dur = cfg.getIntEffect("invisibility_duration_ticks", 100) / 20;
+        int cd = cfg.getCooldown("invisibility", 1200) / 20;
+        return "Невидимость на " + dur + " сек. Первый удар наносит +200% урона + 1 НР чистого урона. Перезарядка: " + cd + " сек.";
     }
 
     @Override
@@ -48,17 +53,17 @@ public class InvisibilityAbility implements Ability {
 
     @Override
     public boolean onActivate(ServerPlayer player) {
+        int duration = ModConfig.getInstance().getIntEffect("invisibility_duration_ticks", 100);
         PlayerClassData data = PlayerClassData.get(player);
-        data.invisibilityActiveTicks = 100; // 5 секунд
+        data.invisibilityActiveTicks = duration;
         data.invisibleAmbushArmed = true;
         PlayerClassData.markDirty(player);
 
-        player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 100, 0, false, false, true));
-        ServerPlayNetworking.send(player, new InvisibilitySyncPayload(100));
+        player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, duration, 0, false, false, true));
+        ServerPlayNetworking.send(player, new InvisibilitySyncPayload(duration));
 
-        ServerLevel level = player.level();
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ILLUSIONER_MIRROR_MOVE, SoundSource.PLAYERS, 1.3f, 1.2f);
-        player.sendOverlayMessage(Component.literal("§bНевидимость на 5 сек."));
+        player.level().playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ILLUSIONER_MIRROR_MOVE, SoundSource.PLAYERS, 1.3f, 1.2f);
+        player.sendOverlayMessage(Component.literal("§bНевидимость на " + (duration/20) + " сек."));
         return true;
     }
 
@@ -82,18 +87,15 @@ public class InvisibilityAbility implements Ability {
     public void onDealDamage(ServerPlayer attacker, LivingEntity target, float damageDealt) {
         PlayerClassData data = PlayerClassData.get(attacker);
         if (data.invisibilityActiveTicks > 0 && data.invisibleAmbushArmed) {
-
-            // 1. СНАЧАЛА снимаем невидимость
             data.invisibilityActiveTicks = 0;
             data.invisibleAmbushArmed = false;
             attacker.removeEffect(MobEffects.INVISIBILITY);
-            attacker.setInvisible(false); // Принудительно
+            attacker.setInvisible(false);
             PlayerClassData.markDirty(attacker);
             ServerPlayNetworking.send(attacker, new InvisibilitySyncPayload(0));
 
-            // 2. ТЕПЕРЬ наносим бонусный урон
-            PureDamage.apply(attacker, target, damageDealt * 2.0f); // +200%
-            PureDamage.apply(attacker, target, 2.0f); // +1 HP
+            float pureDmg = (float) ModConfig.getInstance().getEffect("ambush_pure_damage", 2.0);
+            PureDamage.apply(attacker, target, pureDmg);
 
             attacker.sendOverlayMessage(Component.literal("§cВы раскрыты!"));
         }

@@ -19,6 +19,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -57,7 +58,7 @@ public class ClassesHardcore implements ModInitializer {
         ClassCommand.register();
         LuckyDiggerFortuneHandler.register();
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+        ServerLifecycleEvents.SERVER_STARTED.register(_ -> {
             ModConfig.load();
             LOGGER.info("Config reloaded on server start");
         });
@@ -93,7 +94,6 @@ public class ClassesHardcore implements ModInitializer {
                 if (data.endCrystalUses >= 3) {
                     data.endCrystalUses = 0;
                     data.crystalCooldownEndTick = gameTime + 1800;
-
                     sp.sendOverlayMessage(Component.literal("§eЛимит кристаллов исчерпан. КД 90 сек."));
                     ServerPlayNetworking.send(sp, new CooldownSyncPayload("end_crystal", 1800));
                 }
@@ -137,6 +137,9 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayer player = handler.getPlayer();
             PlayerClassData data = PlayerClassData.get(player);
 
+            // Отправляем конфиг
+            ServerPlayNetworking.send(player, new SyncConfigPayload(ModConfig.getJson()));
+
             if ("ice_strike".equals(data.playerClass)) {
                 data.setPlayerClass("ice_warrior");
                 PlayerClassData.markDirty(player);
@@ -171,10 +174,12 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(player, new AssassinSyncPayload(data.assassinBonusDamage));
             ServerPlayNetworking.send(player, new HeroSyncPayload(data.heroTrades));
             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
-
-            // Синхронизация счетчиков прогрессии при входе
             ServerPlayNetworking.send(player, new CooldownSyncPayload("teleporter_count", data.teleporterCount));
             ServerPlayNetworking.send(player, new CooldownSyncPayload("stuntman_blocks", data.stuntmanClimbedBlocks));
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("porcupine_hits", data.porcupineHitsTaken));
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("archer_kills", data.archerBowKills));
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("warrior_kills", data.warriorSwordKills));
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("dodger_dodges", data.dodgerDodgeCount));
 
             long gameTime = player.level().getGameTime();
             if (data.crystalCooldownEndTick > gameTime) {
@@ -203,13 +208,11 @@ public class ClassesHardcore implements ModInitializer {
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ClassStateSaver.get(server).setDirty();
-            PorcupineReflectAbility.clearTracking(handler.getPlayer().getUUID());
-            PorcupineThornsAbility.clearTracking(handler.getPlayer().getUUID());
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> ClassStateSaver.get(server).setDirty());
 
-        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+        PlayerBlockBreakEvents.AFTER.register((_, player, _, state, _) -> {
             if (!(player instanceof ServerPlayer serverPlayer)) return;
             if (!LuckyDiggerFortuneHandler.isOre(state.getBlock())) return;
 
@@ -217,24 +220,21 @@ public class ClassesHardcore implements ModInitializer {
             if (!"lucky_digger".equals(data.playerClass)) return;
 
             data.luckyDiggerTotalOre++;
-
-            int perLevel = ModConfig.getInstance().getIntEffect("mining_mastery_blocks_per_level", 200);
-            int maxLevel = ModConfig.getInstance().getIntEffect("mining_mastery_max_level", 4);
+            int perLevel = ModConfig.getInstance().getIntEffect("digger_ore_per_level", 200);
+            int maxLevel = ModConfig.getInstance().getIntEffect("digger_max_level", 4);
             int newLevel = perLevel > 0 ? Math.min(data.luckyDiggerTotalOre / perLevel, maxLevel) : 0;
 
-            boolean leveledUp = newLevel > data.luckyDiggerLevel;
-            data.luckyDiggerLevel = newLevel;
-            PlayerClassData.markDirty(serverPlayer);
-
-            if (leveledUp) {
+            if (newLevel > data.luckyDiggerLevel) {
                 serverPlayer.sendOverlayMessage(Component.literal("§aМастерство шахтёра. §fУровень " + newLevel + "."));
             }
+            data.luckyDiggerLevel = newLevel;
+            PlayerClassData.markDirty(serverPlayer);
 
             ServerPlayNetworking.send(serverPlayer, new LuckyDiggerSyncPayload(
                     data.luckyDiggerMode, data.luckyDiggerTotalOre, data.luckyDiggerLevel));
         });
 
-        ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, baseDamage, damageTaken, blocked) -> {
+        ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, _, damageTaken, _) -> {
             if (!(source.getEntity() instanceof ServerPlayer attacker)) return;
             if (damageTaken <= 0) return;
 
@@ -247,11 +247,18 @@ public class ClassesHardcore implements ModInitializer {
             }
         });
 
-        ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, baseDamage, damageTaken, blocked) -> {
+        ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, _, damageTaken, _) -> {
             if (!(entity instanceof ServerPlayer sp)) return;
             if (damageTaken <= 0) return;
 
             PlayerClassData data = PlayerClassData.get(sp);
+
+            if ("porcupine".equals(data.playerClass)) {
+                data.porcupineHitsTaken++;
+                PlayerClassData.markDirty(sp);
+                ServerPlayNetworking.send(sp, new CooldownSyncPayload("porcupine_hits", data.porcupineHitsTaken));
+            }
+
             ClassDefinition def = data.getClassDef();
             if (def == null) return;
 
@@ -267,21 +274,24 @@ public class ClassesHardcore implements ModInitializer {
             if ("warrior".equals(data.playerClass) && attacker.getMainHandItem().is(ItemTags.SWORDS)) {
                 data.warriorSwordKills++;
                 PlayerClassData.markDirty(attacker);
+                ServerPlayNetworking.send(attacker, new CooldownSyncPayload("warrior_kills", data.warriorSwordKills));
+            }
+
+            if ("archer".equals(data.playerClass) && source.getDirectEntity() instanceof AbstractArrow) {
+                data.archerBowKills++;
+                PlayerClassData.markDirty(attacker);
+                ServerPlayNetworking.send(attacker, new CooldownSyncPayload("archer_kills", data.archerBowKills));
             }
 
             if (!"mad_farmer".equals(data.playerClass)) return;
             ItemStack weapon = attacker.getMainHandItem();
             if (!weapon.is(ItemTags.HOES)) return;
 
-            if (entity instanceof ServerPlayer) {
-                data.farmerPlayerKills++;
-            } else {
-                data.farmerMobKills++;
-            }
-            PlayerClassData.markDirty(attacker);
+            if (entity instanceof ServerPlayer) data.farmerPlayerKills++;
+            else data.farmerMobKills++;
 
-            ServerPlayNetworking.send(attacker, new FarmerSyncPayload(
-                    data.farmerMobKills, data.farmerPlayerKills));
+            PlayerClassData.markDirty(attacker);
+            ServerPlayNetworking.send(attacker, new FarmerSyncPayload(data.farmerMobKills, data.farmerPlayerKills));
         });
 
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
@@ -291,18 +301,30 @@ public class ClassesHardcore implements ModInitializer {
             if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return true;
 
             PlayerClassData data = PlayerClassData.get(sp);
+
+            if ("porcupine".equals(data.playerClass)) {
+                return amount * 0.8f > 0;
+            }
+
             if (!"dodger".equals(data.playerClass)) return true;
 
-            double chance = ModConfig.getInstance().getEffect("dodger_dodge_chance", 0.20);
-            if (sp.getRandom().nextDouble() >= chance) return true;
+            ModConfig cfg = ModConfig.getInstance();
+            double baseChance = cfg.getEffect("dodger_dodge_chance", 0.20);
+            int killsPerStep = cfg.getIntEffect("dodger_kills_per_step", 300);
+            double maxBonus = cfg.getEffect("dodger_max_bonus_chance", 0.10);
+
+            double bonus = Math.min((data.dodgerDodgeCount / (double)killsPerStep) * 0.01, maxBonus);
+            double totalChance = baseChance + bonus;
+
+            if (sp.getRandom().nextDouble() >= totalChance) return true;
 
             DodgerAbility.playDodgeEffect(sp);
             data.dodgerDodgeCount++;
             PlayerClassData.markDirty(sp);
 
-            if (amount >= 2.0f) {
-                sp.sendOverlayMessage(Component.literal("§bУклонение!§f Урон от атаки избежан."));
-            }
+            ServerPlayNetworking.send(sp, new CooldownSyncPayload("dodger_dodges", data.dodgerDodgeCount));
+
+            if (amount >= 2.0f) sp.sendOverlayMessage(Component.literal("§bУклонение!§f Урон от атаки избежан."));
             return false;
         });
 
@@ -316,90 +338,36 @@ public class ClassesHardcore implements ModInitializer {
 
     private static boolean isRedstoneComponentBlock(Block block) {
         if (block == Blocks.REDSTONE_TORCH || block == Blocks.REDSTONE_WALL_TORCH
-                || block == Blocks.LEVER || block == Blocks.REDSTONE_BLOCK) {
-            return true;
-        }
+                || block == Blocks.LEVER || block == Blocks.REDSTONE_BLOCK) return true;
         var state = block.defaultBlockState();
         return state.is(BlockTags.BUTTONS) || state.is(BlockTags.PRESSURE_PLATES);
     }
 
     private void registerClasses() {
-        // ВОИН
         ClassRegistry.register(new ClassDefinition("warrior", "Воин",
                 () -> "Универсальный боец с исцелением и быстрыми атаками.",
-                List.of(new HealAbility(), new SpeedBoostAbility(), new CombatExperienceAbility(), new CombatTempoAbility())));
+                List.of(new HealAbility(), new SpeedBoostAbility(), new CombatExperienceAbility(), new CombatTempoAbility(), new CombatVeteranAbility())));
 
-        // СИЛАЧ
-        ClassRegistry.register(new ClassDefinition("strongman", "Силач",
-                "Усиливает удары по мере накопления опыта.",
-                List.of(new PowerGainAbility())));
-
-        // УДАЧЛИВЫЙ КОПАТЕЛЬ
-        ClassRegistry.register(new ClassDefinition("lucky_digger", "Удачливый копатель",
-                "Ускоренная добыча и контроль противников.",
-                List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility(), new LuckyDiggerSuppressionAbility(), new LuckyDiggerHeavyStrikeAbility())));
-
-        // ТЕЛЕПОРТАТОР
-        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор",
-                "Мобильность и шанс спасения после тотема.",
-                List.of(new TeleporterAbility(), new TeleporterLastChanceAbility(), new TeleporterSpatialExpAbility())));
-
-        // ОБЖОРА
-        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора",
-                "Истощает противника и получает преимущество над голодными целями.",
-                List.of(new GluttonyDepletionAbility(), new GluttonySatiateAbility(), new GluttonyAbility(), new GluttonyCravingsAbility(), new GluttonyHungryHunterAbility())));
-
-        // ЖИВЧИК
-        ClassRegistry.register(new ClassDefinition("spry", "Живчик",
-                "Большой запас здоровья и кратковременное поглощение.",
-                List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
-
-        // ЛЕДЯНОЙ ВОИН
-        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин",
-                "Замедляет противников и ослабляет их атаки.",
-                List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
-
-        // ВАМПИР
-        ClassRegistry.register(new ClassDefinition("vampire", "Вампир",
-                "Восстанавливает здоровье за счёт нанесённого урона.",
-                List.of(new VampireDrainAbility(), new VampirePassiveAbility(), new VampireBloodKissAbility())));
-
-        // НЕВИДИМКА
-        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка",
-                "Засады и скрытное перемещение.",
-                List.of(new InvisibilityAbility(), new InvisibleElusivenessAbility())));
-
-        // ВЕЗУНЧИК
-        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик",
-                "Получает случайные предметы благодаря удаче.",
-                List.of(new LuckySwapAbility())));
-
-        // БЕГУН
-        ClassRegistry.register(new ClassDefinition("runner", "Бегун",
-                "Скорость, рывки и атаки на ходу.",
-                List.of(new RunnerSprintAbility(), new RunnerPassiveAbility(), new RunnerSpeedCritAbility())));
-
-        // КАСКАДЁР
-        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадёр",
-                "Преодолевает высоту и стены.",
-                List.of(
-                        new ParkourAbility(),
-                        new ClimbingAbility(),
-                        new StuntmanAbility(),
-                        new StuntmanParkourMasterAbility(),
-                        new StuntmanAirArmorAbility()
-                )));
-
-        // ОСТАЛЬНЫЕ КЛАССЫ
-        ClassRegistry.register(new ClassDefinition("hero", "Герой", "Экономическое развитие через торговлю и рейды.", List.of(new HeroGiftAbility(), new HeroPassiveAbility())));
-        ClassRegistry.register(new ClassDefinition("porcupine", "Дикобраз", "Наказывает врагов за приближение и удары.", List.of(new PorcupineQuillsAbility(), new PorcupineReflectAbility(), new PorcupineThornsAbility())));
-        ClassRegistry.register(new ClassDefinition("archer", "Лучник", "Дистанционные атаки и отступление.", List.of(new ArcherJumpBackAbility(), new ArcherAbility())));
-        ClassRegistry.register(new ClassDefinition("assassin", "Опытный убийца", "Постоянно развивается за счёт убийств мобов.", List.of(new AssassinAbility())));
-        ClassRegistry.register(new ClassDefinition("titan", "Титан", "Очень прочный боец с коротким защитным усилением.", List.of(new MonolithAbility(), new TitanAbility())));
-        ClassRegistry.register(new ClassDefinition("dodger", "Ловкач", "Уклонение от атак и ускорение.", List.of(new DodgeSpeedBoostAbility(), new DodgerAbility())));
-        ClassRegistry.register(new ClassDefinition("brute", "Громила", "Специалист по булаве и подбрасыванию врагов.", List.of(new EarthshakerAbility(), new BruteAbility())));
-        ClassRegistry.register(new ClassDefinition("mad_farmer", "Безумный фермер", "Сражается мотыгой и ускоряет сельское хозяйство.", List.of(new HealingBrewAbility(), new RichHarvestAbility(), new FarmerAbility())));
-        ClassRegistry.register(new ClassDefinition("reincarnator", "Реинкарнатор", "Выживает благодаря многократному использованию тотемов.", List.of(new ReincarnatorAbility())));
+        ClassRegistry.register(new ClassDefinition("strongman", "Силач", "Усиливает удары по мере накопления опыта.", List.of(new PowerGainAbility())));
+        ClassRegistry.register(new ClassDefinition("lucky_digger", "Удачливый копатель", "Ускоренная добыча и контроль противников.", List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility(), new LuckyDiggerSuppressionAbility(), new LuckyDiggerHeavyStrikeAbility())));
+        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор", "Мобильность и шанс спасения после тотема.", List.of(new TeleporterAbility(), new TeleporterLastChanceAbility(), new TeleporterSpatialExpAbility())));
+        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора", "Истощает противника и получает преимущество над голодными целями.", List.of(new GluttonyDepletionAbility(), new GluttonySatiateAbility(), new GluttonyAbility(), new GluttonyCravingsAbility(), new GluttonyHungryHunterAbility())));
+        ClassRegistry.register(new ClassDefinition("spry", "Живчик", "Большой запас здоровья и кратковременное поглощение.", List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
+        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин", "Замедляет противников и ослабляет их атаки.", List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
+        ClassRegistry.register(new ClassDefinition("vampire", "Вампир", "Восстанавливает здоровье за счёт нанесённого урона.", List.of(new VampireDrainAbility(), new VampirePassiveAbility(), new VampireBloodKissAbility())));
+        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка", "Засады и скрытное перемещение.", List.of(new InvisibilityAbility(), new InvisibleElusivenessAbility())));
+        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик", "Получает случайные предметы благодаря удаче.", List.of(new LuckySwapAbility())));
+        ClassRegistry.register(new ClassDefinition("runner", "Бегун", "Скорость, рывки и атаки на ходу.", List.of(new RunnerSprintAbility(), new RunnerPassiveAbility(), new RunnerSpeedCritAbility())));
+        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадёр", "Преодолевает высоту и стены.", List.of(new ParkourAbility(), new ClimbingAbility(), new StuntmanAbility(), new StuntmanParkourMasterAbility(), new StuntmanAirArmorAbility())));
+        ClassRegistry.register(new ClassDefinition("hero", "Герой", "Экономическое развитие через торговлю и рейды.", List.of(new HeroGiftAbility(), new HeroPassiveAbility(), new HeroVillageDefenderAbility())));
+        ClassRegistry.register(new ClassDefinition("porcupine", "Дикобраз", "Наказывает врагов за приближение и удары.", List.of(new PorcupineQuillsAbility(), new PorcupineReflectAbility(), new PorcupineThornsAbility(), new PorcupineChitinAbility(), new PorcupineHardeningAbility())));
+        ClassRegistry.register(new ClassDefinition("archer", "Лучник", "Дистанционные атаки и отступление.", List.of(new ArcherJumpBackAbility(), new ArcherAbility(), new ArcherHunterMasteryAbility())));
+        ClassRegistry.register(new ClassDefinition("assassin", "Опытный убийца", "Развивается за счёт убийств.", List.of(new AssassinAbility())));
+        ClassRegistry.register(new ClassDefinition("titan", "Титан", "Очень прочный боец.", List.of(new MonolithAbility(), new TitanAbility())));
+        ClassRegistry.register(new ClassDefinition("dodger", "Ловкач", "Уклонение и ускорение.", List.of(new DodgeSpeedBoostAbility(), new DodgerAbility(), new DodgerSurvivalInstinctAbility())));
+        ClassRegistry.register(new ClassDefinition("brute", "Громила", "Булава и подбрасывание.", List.of(new EarthshakerAbility(), new BruteAbility())));
+        ClassRegistry.register(new ClassDefinition("mad_farmer", "Безумный фермер", "Мотыга и урожай.", List.of(new HealingBrewAbility(), new RichHarvestAbility(), new FarmerAbility())));
+        ClassRegistry.register(new ClassDefinition("reincarnator", "Реинкарнатор", "Многократные тотемы.", List.of(new ReincarnatorAbility())));
 
         LOGGER.info("Registered {} classes", ClassRegistry.getAll().size());
     }
@@ -420,11 +388,11 @@ public class ClassesHardcore implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(ClassTokensSyncPayload.TYPE, ClassTokensSyncPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Pick3OptionsPayload.TYPE, Pick3OptionsPayload.CODEC);
 
+        // НОВЫЙ ПАКЕТ КОНФИГА
+        PayloadTypeRegistry.clientboundPlay().register(SyncConfigPayload.TYPE, SyncConfigPayload.CODEC);
+
         ServerPlayNetworking.registerGlobalReceiver(UseAbilityPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                AbilityManager.tryActivate(player, payload.abilityId());
-            });
+            context.server().execute(() -> AbilityManager.tryActivate(context.player(), payload.abilityId()));
         });
 
         ServerPlayNetworking.registerGlobalReceiver(RequestClassChangePayload.TYPE, (payload, context) -> {
@@ -437,38 +405,25 @@ public class ClassesHardcore implements ModInitializer {
                         data.randomChangeTokens--;
                         String[] classes = ClassRegistry.getAll().keySet().toArray(new String[0]);
                         if (classes.length > 0) {
-                            String randomClass = classes[new Random().nextInt(classes.length)];
-                            ClassCommand.applyClass(player, randomClass);
+                            ClassCommand.applyClass(player, classes[new Random().nextInt(classes.length)]);
                             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
                         }
-                    } else {
-                        player.sendSystemMessage(Component.literal("§cУ вас нет попыток для случайной смены класса."));
-                    }
+                    } else player.sendSystemMessage(Component.literal("§cУ вас нет попыток."));
                 } else if (payload.actionType() == 1) {
                     if (data.pick3ChangeTokens > 0) {
                         data.pick3ChangeTokens--;
                         List<String> allClasses = new ArrayList<>(ClassRegistry.getAll().keySet());
                         allClasses.remove(data.playerClass);
                         Collections.shuffle(allClasses);
-                        List<String> options = allClasses.subList(0, Math.min(3, allClasses.size()));
-
-                        ServerPlayNetworking.send(player, new Pick3OptionsPayload(options));
+                        ServerPlayNetworking.send(player, new Pick3OptionsPayload(allClasses.subList(0, Math.min(3, allClasses.size()))));
                         ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
-                    } else {
-                        player.sendSystemMessage(Component.literal("§cУ вас нет попыток для выбора из 3 классов."));
-                    }
+                    } else player.sendSystemMessage(Component.literal("§cУ вас нет попыток."));
                 } else if (payload.actionType() == 2) {
                     if (Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(player.createCommandSourceStack())) {
-                        if (ClassRegistry.get(payload.classId()) != null) {
-                            ClassCommand.applyClass(player, payload.classId());
-                        }
-                    } else {
-                        player.sendSystemMessage(Component.literal("§cУ вас нет прав на это действие."));
-                    }
+                        if (ClassRegistry.get(payload.classId()) != null) ClassCommand.applyClass(player, payload.classId());
+                    } else player.sendSystemMessage(Component.literal("§cУ вас нет прав."));
                 } else if (payload.actionType() == 3) {
-                    if (ClassRegistry.get(payload.classId()) != null) {
-                        ClassCommand.applyClass(player, payload.classId());
-                    }
+                    if (ClassRegistry.get(payload.classId()) != null) ClassCommand.applyClass(player, payload.classId());
                 }
             });
         });

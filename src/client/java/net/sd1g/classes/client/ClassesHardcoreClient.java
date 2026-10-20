@@ -22,6 +22,7 @@ import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.ability.ClassDefinition;
 import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.ability.impl.TeleporterAbility;
+import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.network.*;
 import org.lwjgl.glfw.GLFW;
@@ -42,7 +43,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     public static final Map<String, Integer> cooldownTotal = new HashMap<>();
     public static String currentClass = "none";
 
-    // Токены
     public static int randomChangeTokens = 0;
     public static int pick3ChangeTokens = 0;
 
@@ -105,6 +105,12 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 new KeyMapping("key.classesharcore.open_config", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category)
         );
 
+        ClientPlayNetworking.registerGlobalReceiver(SyncConfigPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                ModConfig.loadFromJson(payload.json());
+            });
+        });
+
         ClientPlayNetworking.registerGlobalReceiver(ClassSyncPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 currentClass = payload.classId();
@@ -144,11 +150,18 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 String id = payload.abilityId();
                 int remaining = payload.remainingTicks();
 
-                // Синхронизация счетчиков прогрессии
                 if (id.equals("teleporter_count")) {
                     AbilityClientState.teleporterCount = remaining;
                 } else if (id.equals("stuntman_blocks")) {
                     AbilityClientState.stuntmanClimbedBlocks = remaining;
+                } else if (id.equals("porcupine_hits")) {
+                    AbilityClientState.porcupineHitsTaken = remaining;
+                } else if (id.equals("archer_kills")) {
+                    AbilityClientState.archerBowKills = remaining;
+                } else if (id.equals("warrior_kills")) {
+                    AbilityClientState.warriorSwordKills = remaining;
+                } else if (id.equals("dodger_dodges")) {
+                    AbilityClientState.dodgerDodges = remaining;
                 } else {
                     cooldownTicks.put(id, remaining);
                     cooldownTotal.put(id, remaining);
@@ -418,9 +431,19 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         abilityListCache.clear();
 
         if (def != null) {
+            // Сортировка: сначала активные, потом пассивные
+            List<Ability> sortedAbilities = new ArrayList<>();
+            for (Ability a : def.abilities) {
+                if (!a.isPassive()) sortedAbilities.add(a);
+            }
+            for (Ability a : def.abilities) {
+                if (a.isPassive()) sortedAbilities.add(a);
+            }
+
             int abilityX = classX + SQUARE_SIZE + SQUARE_SPACING;
             int activeCounter = 0;
-            for (Ability ability : def.abilities) {
+
+            for (Ability ability : sortedAbilities) {
                 boolean onCooldown = !ability.isPassive()
                         && cooldownTicks.getOrDefault(ability.getId(), 0) > 0;
                 drawSquare(graphics, abilityX, startY, BORDER_COLOR);

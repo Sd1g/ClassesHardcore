@@ -1,15 +1,11 @@
 package net.sd1g.classes.ability.impl;
 
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -21,39 +17,22 @@ public class SpeedBoostAbility implements Ability {
 
     @Override
     public String getDescription() {
-        return "Постоянно даёт Скорость I.";
+        int amp = ModConfig.getInstance().getIntEffect("warrior_speed_amp", 0) + 1;
+        return "Постоянно даёт Скорость " + amp + ".";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        return List.of("§7Эффект: §bСкорость I §7(постоянно)");
+        int amp = ModConfig.getInstance().getIntEffect("warrior_speed_amp", 0) + 1;
+        return List.of("§7Эффект: §bСкорость " + amp);
     }
 
     @Override
     public void onPassiveTick(ServerPlayer player) {
+        int amp = ModConfig.getInstance().getIntEffect("warrior_speed_amp", 0);
         MobEffectInstance current = player.getEffect(MobEffects.SPEED);
-        boolean wasAbsent = current == null;
-        boolean wrongAmp = current != null && current.getAmplifier() != 0;
-        boolean lowDuration = current != null && current.getDuration() < 40;
-
-        if (wasAbsent || wrongAmp || lowDuration) {
-            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 100, 0, true, false));
+        if (current == null || current.getAmplifier() != amp || current.getDuration() < 40) {
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 100, amp, true, false));
         }
-
-        if (wasAbsent) {
-            ServerLevel level = player.level();
-            level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BREEZE_WIND_CHARGE_BURST, SoundSource.PLAYERS, 0.6f, 1.6f);
-        }
-
-        if (player.tickCount % 8 == 0) {
-            ServerLevel level = player.level();
-            level.sendParticles(new DustParticleOptions(0xFFAA00, 1.0f),
-                    player.getX(), player.getY() + 0.05, player.getZ(), 4, 0.4, 0.03, 0.4, 0.02);
-        }
-    }
-
-    public static void removeEffects(ServerPlayer player) {
-        player.removeEffect(MobEffects.SPEED);
     }
 }

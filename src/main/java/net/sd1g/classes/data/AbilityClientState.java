@@ -12,7 +12,11 @@ public class AbilityClientState {
     public static int farmerPlayerKills = 0;
     public static int heroTrades = 0;
     public static int teleporterCount = 0;
-
-    // ДОБАВЛЕНО:
     public static int stuntmanClimbedBlocks = 0;
+    public static int porcupineHitsTaken = 0;
+    public static int archerBowKills = 0;
+    public static int warriorSwordKills = 0;
+
+    // НОВОЕ ПОЛЕ ДЛЯ ЛОВКАЧА
+    public static int dodgerDodges = 0;
 }

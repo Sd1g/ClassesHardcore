@@ -1,9 +1,8 @@
 package net.sd1g.classes.ability.impl;
 
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
-import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -14,17 +13,14 @@ public class IceWeakeningAbility implements Ability {
     @Override public int getBaseCooldown() { return 0; }
 
     @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/ice_weakening"); }
-
-    @Override
     public String getDescription() {
-        return "Каждый уровень эффекта «Замедление» на противнике снижает его исходящий урон на 0,5 НР.";
+        ModConfig cfg = ModConfig.getInstance();
+        double reduction = cfg.getEffect("ice_weakening_damage_per_level", 0.5);
+        return "Каждый уровень эффекта «Замедление» на противнике снижает его исходящий урон на " + reduction + " НР.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        return List.of(
-                "§7Ослабление: §c−0.5 НР §7урона за уровень Замедления"
-        );
+        return List.of("§7Логика обрабатывается через Mixin.");
     }
 }
