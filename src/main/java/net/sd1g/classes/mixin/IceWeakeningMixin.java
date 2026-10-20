@@ -12,13 +12,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/**
- * Пассивка «Ледяное ослабление» (класс Ледяной воин).
- * Работает только для Ледяного воина в роли ЗАЩИТНИКА:
- * если атакующий находится под эффектом Slowness,
- * его исходящий урон по Ледяному воину уменьшается
- * на (уровень Slowness × ice_weakening_damage_per_level).
- */
 @Mixin(LivingEntity.class)
 public class IceWeakeningMixin {
 
@@ -45,7 +38,8 @@ public class IceWeakeningMixin {
         if (slowness == null) return amount;
 
         int slownessLevel = slowness.getAmplifier() + 1;
-        double perLevel = ModConfig.getInstance().getEffect("ice_weakening_damage_per_level", 1.0);
+        // ИСПРАВЛЕНИЕ: Теперь по умолчанию 0.5 НР за уровень (из документа)
+        double perLevel = ModConfig.getInstance().getEffect("ice_weakening_damage_per_level", 0.5);
         float reduction = (float) (slownessLevel * perLevel);
 
         return Math.max(0f, amount - reduction);

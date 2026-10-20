@@ -11,7 +11,8 @@ public class AbilityClientState {
     public static int farmerMobKills = 0;
     public static int farmerPlayerKills = 0;
     public static int heroTrades = 0;
-
-    // ДОБАВЛЕНО: Счетчик для Телепортатора
     public static int teleporterCount = 0;
+
+    // ДОБАВЛЕНО:
+    public static int stuntmanClimbedBlocks = 0;
 }

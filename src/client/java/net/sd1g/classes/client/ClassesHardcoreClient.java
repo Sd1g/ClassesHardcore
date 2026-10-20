@@ -53,7 +53,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     private static final List<int[]> abilityPositionsCache = new ArrayList<>();
     private static final List<Ability> abilityListCache = new ArrayList<>();
 
-    private static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
+    public static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
 
     private static boolean teleportAiming = false;
     private static int previewTickCounter = 0;
@@ -134,6 +134,8 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 AbilityClientState.farmerMobKills = 0;
                 AbilityClientState.farmerPlayerKills = 0;
                 AbilityClientState.heroTrades = 0;
+
+                preloadIcons();
             });
         });
 
@@ -142,8 +144,11 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 String id = payload.abilityId();
                 int remaining = payload.remainingTicks();
 
+                // Синхронизация счетчиков прогрессии
                 if (id.equals("teleporter_count")) {
                     AbilityClientState.teleporterCount = remaining;
+                } else if (id.equals("stuntman_blocks")) {
+                    AbilityClientState.stuntmanClimbedBlocks = remaining;
                 } else {
                     cooldownTicks.put(id, remaining);
                     cooldownTotal.put(id, remaining);
@@ -257,6 +262,19 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 (graphics, tickCounter) -> renderClassHud(graphics));
     }
 
+    private static void preloadIcons() {
+        for (ClassDefinition def : ClassRegistry.getAll().values()) {
+            if (def.icon != null) {
+                getTextureSize(def.icon);
+            }
+            for (Ability ability : def.abilities) {
+                if (ability.getIcon() != null) {
+                    getTextureSize(ability.getIcon());
+                }
+            }
+        }
+    }
+
     private void handlePrimaryActivation() {
         if ("teleporter".equals(currentClass)) {
             if (cooldownTicks.getOrDefault("teleport", 0) > 0) return;
@@ -317,12 +335,12 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         return keyName(activateSecondaryKey, "V");
     }
 
-    private static int[] getTextureSize(Identifier icon) {
-        if (icon == null) return new int[]{32, 32}; // ЗАЩИТА ОТ NULL
+    public static int[] getTextureSize(Identifier icon) {
+        if (icon == null) return new int[]{0, 0};
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
-                if (resource.isEmpty()) return new int[]{32, 32};
+                if (resource.isEmpty()) return new int[]{0, 0};
                 try (var stream = resource.get().open()) {
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
@@ -331,7 +349,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                     return new int[]{w, h};
                 }
             } catch (Exception e) {
-                return new int[]{32, 32};
+                return new int[]{0, 0};
             }
         });
     }
@@ -514,14 +532,17 @@ public class ClassesHardcoreClient implements ClientModInitializer {
 
     private void drawIcon(GuiGraphicsExtractor graphics, Identifier icon, int x, int y) {
         if (icon == null) {
-            // ЗАЩИТА ОТ NULL: Рисуем заглушку, если иконки нет
             graphics.fill(x + ICON_INSET, y + ICON_INSET, x + ICON_INSET + ICON_SIZE, y + ICON_INSET + ICON_SIZE, 0xFF333333);
             return;
         }
         int[] size = getTextureSize(icon);
         int srcW = size[0];
         int srcH = size[1];
-        if (srcW <= 0 || srcH <= 0) return;
+
+        if (srcW <= 0 || srcH <= 0) {
+            graphics.fill(x + ICON_INSET, y + ICON_INSET, x + ICON_INSET + ICON_SIZE, y + ICON_INSET + ICON_SIZE, 0xFF333333);
+            return;
+        }
 
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) (x + ICON_INSET), (float) (y + ICON_INSET));
@@ -537,7 +558,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     }
 
     private void drawGlint(GuiGraphicsExtractor graphics, Identifier icon, int x, int y) {
-        if (icon == null) return; // ЗАЩИТА ОТ NULL
+        if (icon == null) return;
         int[] size = getTextureSize(icon);
         int srcW = size[0];
         int srcH = size[1];

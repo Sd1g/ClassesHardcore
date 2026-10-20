@@ -23,9 +23,8 @@ public class HealAbility implements Ability {
     @Override public int getBaseCooldown() { return 440; } // 22 секунды
 
     private float getHealAmount(ServerPlayer player) {
-        float base = 4.0f; // 4 HP
+        float base = 4.0f;
         PlayerClassData data = PlayerClassData.get(player);
-        // Боевой ветеран: +0.5 HP за каждые 2000 убийств, макс +10 HP (20к убийств)
         float bonus = Math.min((data.warriorSwordKills / 2000) * 0.5f, 10.0f);
         return base + bonus;
     }
@@ -38,9 +37,18 @@ public class HealAbility implements Ability {
     @Override
     public List<String> getExtraTooltipLines(Player player) {
         if (player instanceof ServerPlayer sp) {
+            PlayerClassData data = PlayerClassData.get(sp);
             float amount = getHealAmount(sp);
+            int kills = data.warriorSwordKills;
+            float bonusHP = amount - 4.0f;
+            int toNext = 2000 - (kills % 2000);
+            if (kills >= 20000) toNext = 0;
+
             return List.of(
                     "§7Мгновенное лечение: §a" + amount + " HP",
+                    "§7Убийств мечом: §b" + kills,
+                    "§7Текущий бонус: §a+" + bonusHP + " HP",
+                    (toNext > 0 ? "§7До след. бонуса: §f" + toNext + " убийств" : "§7Максимальный бонус"),
                     "§7Регенерация: §bI §7на §f5 сек.",
                     "§7Кулдаун: §f22 сек."
             );
@@ -53,7 +61,7 @@ public class HealAbility implements Ability {
         float amount = getHealAmount(player);
 
         player.heal(amount);
-        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0)); // Реген I, 5 сек
+        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0));
 
         ServerLevel level = player.level();
         double x = player.getX(), y = player.getY(), z = player.getZ();

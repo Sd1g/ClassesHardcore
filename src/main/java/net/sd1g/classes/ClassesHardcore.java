@@ -67,7 +67,6 @@ public class ClassesHardcore implements ModInitializer {
             if (now % 200 == 0) TntOwnerTracker.cleanupOld(now);
         });
 
-        // === Обработчик клика блоков (TNT и Кристаллы) ===
         UseBlockCallback.EVENT.register((player, level, hand, hitResult) -> {
             if (!(player instanceof ServerPlayer sp)) return InteractionResult.PASS;
             if (level.isClientSide()) return InteractionResult.PASS;
@@ -77,7 +76,6 @@ public class ClassesHardcore implements ModInitializer {
             BlockPos clickedPos = hitResult.getBlockPos();
             long tick = level.getServer() != null ? level.getServer().getTickCount() : 0;
 
-            // --- Кристаллы Энда ---
             if (held.is(Items.END_CRYSTAL)) {
                 PlayerClassData data = PlayerClassData.get(sp);
                 long gameTime = level.getGameTime();
@@ -94,14 +92,13 @@ public class ClassesHardcore implements ModInitializer {
 
                 if (data.endCrystalUses >= 3) {
                     data.endCrystalUses = 0;
-                    data.crystalCooldownEndTick = gameTime + 1800; // 90 секунд
+                    data.crystalCooldownEndTick = gameTime + 1800;
 
                     sp.sendOverlayMessage(Component.literal("§eЛимит кристаллов исчерпан. КД 90 сек."));
                     ServerPlayNetworking.send(sp, new CooldownSyncPayload("end_crystal", 1800));
                 }
             }
 
-            // --- Логика TNT ---
             boolean isIgniter = held.is(Items.FLINT_AND_STEEL) || held.is(Items.FIRE_CHARGE);
             if (isIgniter) {
                 boolean tntNearby = false;
@@ -174,6 +171,10 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(player, new AssassinSyncPayload(data.assassinBonusDamage));
             ServerPlayNetworking.send(player, new HeroSyncPayload(data.heroTrades));
             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
+
+            // Синхронизация счетчиков прогрессии при входе
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("teleporter_count", data.teleporterCount));
+            ServerPlayNetworking.send(player, new CooldownSyncPayload("stuntman_blocks", data.stuntmanClimbedBlocks));
 
             long gameTime = player.level().getGameTime();
             if (data.crystalCooldownEndTick > gameTime) {
@@ -338,42 +339,58 @@ public class ClassesHardcore implements ModInitializer {
                 "Ускоренная добыча и контроль противников.",
                 List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility(), new LuckyDiggerSuppressionAbility(), new LuckyDiggerHeavyStrikeAbility())));
 
-        // ТЕЛЕПОРТАТОР (ОБНОВЛЕНО)
+        // ТЕЛЕПОРТАТОР
         ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор",
                 "Мобильность и шанс спасения после тотема.",
-                List.of(
-                        new TeleporterAbility(),
-                        new TeleporterLastChanceAbility(),
-                        new TeleporterSpatialExpAbility()
-                )));
+                List.of(new TeleporterAbility(), new TeleporterLastChanceAbility(), new TeleporterSpatialExpAbility())));
 
-        // ОБЖОРА (ОБНОВЛЕНО)
+        // ОБЖОРА
         ClassRegistry.register(new ClassDefinition("gluttony", "Обжора",
                 "Истощает противника и получает преимущество над голодными целями.",
-                List.of(
-                        new GluttonyDepletionAbility(),
-                        new GluttonySatiateAbility(),
-                        new GluttonyAbility(),
-                        new GluttonyCravingsAbility(),
-                        new GluttonyHungryHunterAbility()
-                )));
+                List.of(new GluttonyDepletionAbility(), new GluttonySatiateAbility(), new GluttonyAbility(), new GluttonyCravingsAbility(), new GluttonyHungryHunterAbility())));
 
-        // ЖИВЧИК (ОБНОВЛЕНО)
+        // ЖИВЧИК
         ClassRegistry.register(new ClassDefinition("spry", "Живчик",
                 "Большой запас здоровья и кратковременное поглощение.",
+                List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
+
+        // ЛЕДЯНОЙ ВОИН
+        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин",
+                "Замедляет противников и ослабляет их атаки.",
+                List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
+
+        // ВАМПИР
+        ClassRegistry.register(new ClassDefinition("vampire", "Вампир",
+                "Восстанавливает здоровье за счёт нанесённого урона.",
+                List.of(new VampireDrainAbility(), new VampirePassiveAbility(), new VampireBloodKissAbility())));
+
+        // НЕВИДИМКА
+        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка",
+                "Засады и скрытное перемещение.",
+                List.of(new InvisibilityAbility(), new InvisibleElusivenessAbility())));
+
+        // ВЕЗУНЧИК
+        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик",
+                "Получает случайные предметы благодаря удаче.",
+                List.of(new LuckySwapAbility())));
+
+        // БЕГУН
+        ClassRegistry.register(new ClassDefinition("runner", "Бегун",
+                "Скорость, рывки и атаки на ходу.",
+                List.of(new RunnerSprintAbility(), new RunnerPassiveAbility(), new RunnerSpeedCritAbility())));
+
+        // КАСКАДЁР
+        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадёр",
+                "Преодолевает высоту и стены.",
                 List.of(
-                        new SecondWindAbility(),
-                        new VitalityAbility(),
-                        new LifeExperienceAbility()
+                        new ParkourAbility(),
+                        new ClimbingAbility(),
+                        new StuntmanAbility(),
+                        new StuntmanParkourMasterAbility(),
+                        new StuntmanAirArmorAbility()
                 )));
 
-        // ОСТАЛЬНЫЕ КЛАССЫ (Ожидают переработки)
-        ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин", "Замедляет противников и ослабляет их атаки.", List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
-        ClassRegistry.register(new ClassDefinition("vampire", "Вампир", "Восстанавливает здоровье за счёт нанесённого урона.", List.of(new VampireDrainAbility(), new VampirePassiveAbility())));
-        ClassRegistry.register(new ClassDefinition("invisible", "Невидимка", "Засады и скрытное перемещение.", List.of(new InvisibilityAbility())));
-        ClassRegistry.register(new ClassDefinition("lucky_guy", "Везунчик", "Получает случайные предметы благодаря удаче.", List.of(new LuckySwapAbility())));
-        ClassRegistry.register(new ClassDefinition("runner", "Бегун", "Скорость, рывки и атаки на ходу.", List.of(new RunnerSprintAbility(), new RunnerPassiveAbility())));
-        ClassRegistry.register(new ClassDefinition("stuntman", "Каскадёр", "Преодолевает высоту и стены.", List.of(new ParkourAbility(), new ClimbingAbility(), new StuntmanAbility())));
+        // ОСТАЛЬНЫЕ КЛАССЫ
         ClassRegistry.register(new ClassDefinition("hero", "Герой", "Экономическое развитие через торговлю и рейды.", List.of(new HeroGiftAbility(), new HeroPassiveAbility())));
         ClassRegistry.register(new ClassDefinition("porcupine", "Дикобраз", "Наказывает врагов за приближение и удары.", List.of(new PorcupineQuillsAbility(), new PorcupineReflectAbility(), new PorcupineThornsAbility())));
         ClassRegistry.register(new ClassDefinition("archer", "Лучник", "Дистанционные атаки и отступление.", List.of(new ArcherJumpBackAbility(), new ArcherAbility())));

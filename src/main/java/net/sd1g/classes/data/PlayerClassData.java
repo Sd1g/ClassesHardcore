@@ -44,6 +44,7 @@ public class PlayerClassData {
     public boolean climbingActive = false;
     public boolean climbingInProgress = false;
     public int stuntmanClimbedBlocks = 0;
+    public double stuntmanClimbAccumulator = 0.0; // НОВОЕ ПОЛЕ
 
     // --- Герой ---
     public int heroTrades = 0;
@@ -62,7 +63,7 @@ public class PlayerClassData {
 
     // --- Кристаллы Энда (Игровые тики) ---
     public int endCrystalUses = 0;
-    public long crystalCooldownEndTick = 0; // Храним тик, когда КД закончится
+    public long crystalCooldownEndTick = 0;
 
     public static PlayerClassData get(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
@@ -129,6 +130,7 @@ public class PlayerClassData {
         tag.putBoolean("climbingActive", climbingActive);
         tag.putBoolean("climbingInProgress", climbingInProgress);
         tag.putInt("stuntmanClimbedBlocks", stuntmanClimbedBlocks);
+        tag.putDouble("stuntmanClimbAccumulator", stuntmanClimbAccumulator); // СОХРАНЕНИЕ
         tag.putInt("heroTrades", heroTrades);
         tag.putInt("heroTradeBaseline", heroTradeBaseline);
         tag.putInt("randomChangeTokens", randomChangeTokens);
@@ -167,6 +169,7 @@ public class PlayerClassData {
         data.climbingActive = tag.getBooleanOr("climbingActive", false);
         data.climbingInProgress = tag.getBooleanOr("climbingInProgress", false);
         data.stuntmanClimbedBlocks = tag.getIntOr("stuntmanClimbedBlocks", 0);
+        data.stuntmanClimbAccumulator = tag.getDoubleOr("stuntmanClimbAccumulator", 0.0); // ЗАГРУЗКА
         data.heroTrades = tag.getIntOr("heroTrades", 0);
         data.heroTradeBaseline = tag.getIntOr("heroTradeBaseline", 0);
         data.randomChangeTokens = tag.getIntOr("randomChangeTokens", 0);

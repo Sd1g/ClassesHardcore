@@ -20,7 +20,9 @@
     "TntSpawnMixin",
     "ArrowTntMixin",
     "WarriorSwordDamageMixin",
-    "HeroRaidDamageMixin"
+    "HeroRaidDamageMixin",
+    "IceWeakeningMixin",
+    "InvisibilityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
