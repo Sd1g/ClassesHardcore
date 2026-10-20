@@ -112,16 +112,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 cachedFirstActiveAbility = findActiveAbility(cachedClassDef, 0);
                 cachedSecondActiveAbility = findActiveAbility(cachedClassDef, 1);
 
-                // Сохраняем кулдаун кристаллов перед очисткой
                 int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
 
                 cooldownTicks.clear();
                 cooldownTotal.clear();
 
-                // Возвращаем кулдаун кристаллов обратно
                 if (crystalCd > 0) {
                     cooldownTicks.put("end_crystal", crystalCd);
-                    cooldownTotal.put("end_crystal", 1800); // Стандартный максимум 90 сек
+                    cooldownTotal.put("end_crystal", 1800);
                 }
 
                 teleportAiming = false;
@@ -136,7 +134,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 AbilityClientState.farmerMobKills = 0;
                 AbilityClientState.farmerPlayerKills = 0;
                 AbilityClientState.heroTrades = 0;
-                // AbilityClientState.teleporterCount = 0; (Не сбрасываем, так как сервер пришлет актуальное значение)
             });
         });
 
@@ -145,7 +142,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 String id = payload.abilityId();
                 int remaining = payload.remainingTicks();
 
-                // Хак: используем этот пакет для синхронизации счетчика телепортаций
                 if (id.equals("teleporter_count")) {
                     AbilityClientState.teleporterCount = remaining;
                 } else {
@@ -322,12 +318,12 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     }
 
     private static int[] getTextureSize(Identifier icon) {
+        if (icon == null) return new int[]{32, 32}; // ЗАЩИТА ОТ NULL
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    // Используем быстрый NativeImage вместо ImageIO
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
                     int h = img.getHeight();
@@ -378,7 +374,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         int startX = hotbarRight + 8;
         int startY = screenHeight - SQUARE_SIZE - KEY_LABEL_HEIGHT - 4;
 
-        // Отрисовка КД кристаллов
         int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
         if (crystalCd > 0) {
             int seconds = (crystalCd + 19) / 20;
@@ -518,6 +513,11 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     }
 
     private void drawIcon(GuiGraphicsExtractor graphics, Identifier icon, int x, int y) {
+        if (icon == null) {
+            // ЗАЩИТА ОТ NULL: Рисуем заглушку, если иконки нет
+            graphics.fill(x + ICON_INSET, y + ICON_INSET, x + ICON_INSET + ICON_SIZE, y + ICON_INSET + ICON_SIZE, 0xFF333333);
+            return;
+        }
         int[] size = getTextureSize(icon);
         int srcW = size[0];
         int srcH = size[1];
@@ -537,6 +537,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     }
 
     private void drawGlint(GuiGraphicsExtractor graphics, Identifier icon, int x, int y) {
+        if (icon == null) return; // ЗАЩИТА ОТ NULL
         int[] size = getTextureSize(icon);
         int srcW = size[0];
         int srcH = size[1];

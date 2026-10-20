@@ -1,5 +1,6 @@
 package net.sd1g.classes.ability;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -12,25 +13,20 @@ public interface Ability {
     String getId();
     String getDisplayName();
     boolean isPassive();
-    int getBaseCooldown();
+    String getDescription();
 
-    default String getDescription() { return ""; }
-    default List<String> getExtraTooltipLines(Player player) { return List.of(); }
+    default int getBaseCooldown() { return 0; }
+    default Identifier getIcon() { return null; }
+    default int getTickInterval() { return 1; }
     default boolean isHighlighted(Player player) { return false; }
+    default List<String> getExtraTooltipLines(Player player) { return List.of(); }
 
-    default Identifier getIcon() {
-        return Identifier.fromNamespaceAndPath("classeshardcore",
-                "textures/gui/sprites/ability/" + getId() + ".png");
-    }
-
-    default int getTickInterval() { return 20; }
-
-    /** Динамический кулдаун (например, для телепорта в зависимости от дистанции). */
-    default int getDynamicCooldown(ServerPlayer player) { return getBaseCooldown(); }
-
-    default boolean onActivate(ServerPlayer player) { return true; }
+    default boolean onActivate(ServerPlayer player) { return false; }
     default void onPassiveTick(ServerPlayer player) {}
-    default void onHit(ServerPlayer attacker, LivingEntity target) {}
     default void onDealDamage(ServerPlayer attacker, LivingEntity target, float damageDealt) {}
     default void onTakeDamage(ServerPlayer player, DamageSource source, float damageTaken) {}
+    default int getDynamicCooldown(ServerPlayer player) { return getBaseCooldown(); }
+
+    // НОВОЕ: Метод для очистки внутренних состояний при смене класса
+    default void onRemove(ServerPlayer player) {}
 }
