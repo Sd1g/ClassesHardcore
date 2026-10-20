@@ -348,12 +348,20 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         return keyName(activateSecondaryKey, "V");
     }
 
+    public static Identifier getTexturePath(Identifier icon) {
+        if (icon == null) return null;
+        // Если путь уже содержит textures/ и .png, возвращаем как есть (на всякий случай)
+        if (icon.getPath().startsWith("textures/") && icon.getPath().endsWith(".png")) {
+            return icon;
+        }
+        return Identifier.fromNamespaceAndPath(icon.getNamespace(), "textures/" + icon.getPath() + ".png");
+    }
+
     public static int[] getTextureSize(Identifier icon) {
         if (icon == null) return new int[]{0, 0};
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
-                // ИСПРАВЛЕНИЕ: Динамически добавляем textures/ и .png для чтения файла
-                Identifier actualPath = Identifier.fromNamespaceAndPath(id.getNamespace(), "textures/" + id.getPath() + ".png");
+                Identifier actualPath = getTexturePath(id);
                 var resource = Minecraft.getInstance().getResourceManager().getResource(actualPath);
                 if (resource.isEmpty()) return new int[]{0, 0};
                 try (var stream = resource.get().open()) {
@@ -568,12 +576,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             return;
         }
 
+        Identifier texture = getTexturePath(icon);
+
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) (x + ICON_INSET), (float) (y + ICON_INSET));
         graphics.pose().scale((float) ICON_SIZE / srcW, (float) ICON_SIZE / srcH);
         graphics.blit(
                 RenderPipelines.GUI_TEXTURED,
-                icon,
+                texture,
                 0, 0, 0.0f, 0.0f,
                 srcW, srcH,
                 srcW, srcH
@@ -588,12 +598,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         int srcH = size[1];
         if (srcW <= 0 || srcH <= 0) return;
 
+        Identifier texture = getTexturePath(icon);
+
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) (x + ICON_INSET), (float) (y + ICON_INSET));
         graphics.pose().scale((float) ICON_SIZE / srcW, (float) ICON_SIZE / srcH);
         graphics.blit(
                 RenderPipelines.GUI_TEXTURED,
-                icon,
+                texture,
                 0, 0, 0.0f, 0.0f,
                 srcW, srcH,
                 srcW, srcH,

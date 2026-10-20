@@ -226,22 +226,26 @@ public class ClassesHardcoreMenuScreen extends Screen {
         }
         int[] texSize = getTextureSize(icon);
         int srcW = texSize[0], srcH = texSize[1];
-        if (srcW <= 0 || srcH <= 0) return;
+        if (srcW <= 0 || srcH <= 0) {
+            graphics.fill(x, y, x + size, y + size, 0xFF555555);
+            return;
+        }
+
+        Identifier texture = ClassesHardcoreClient.getTexturePath(icon);
 
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) x, (float) y);
         graphics.pose().scale((float) size / srcW, (float) size / srcH);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, icon, 0, 0, 0.0f, 0.0f, srcW, srcH, srcW, srcH);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, 0.0f, 0.0f, srcW, srcH, srcW, srcH);
         graphics.pose().popMatrix();
     }
 
     private static int[] getTextureSize(Identifier icon) {
         return TEXTURE_SIZE_CACHE.computeIfAbsent(icon, id -> {
             try {
-                // ИСПРАВЛЕНИЕ: Динамически добавляем textures/ и .png для чтения файла
-                Identifier actualPath = Identifier.fromNamespaceAndPath(id.getNamespace(), "textures/" + id.getPath() + ".png");
+                Identifier actualPath = ClassesHardcoreClient.getTexturePath(id);
                 var resource = Minecraft.getInstance().getResourceManager().getResource(actualPath);
-                if (resource.isEmpty()) return new int[]{32, 32};
+                if (resource.isEmpty()) return new int[]{0, 0};
                 try (var stream = resource.get().open()) {
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
@@ -249,7 +253,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
                     img.close();
                     return new int[]{w, h};
                 }
-            } catch (Exception e) { return new int[]{32, 32}; }
+            } catch (Exception e) { return new int[]{0, 0}; }
         });
     }
 
