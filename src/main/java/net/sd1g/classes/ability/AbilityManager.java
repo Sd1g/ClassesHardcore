@@ -49,9 +49,14 @@ public class AbilityManager {
         boolean success = ability.onActivate(player);
         if (!success) return false;
 
-        // Используем динамический кулдаун
-        int defaultCd = ability.getDynamicCooldown(player);
-        int cd = ModConfig.getInstance().getCooldown(abilityId, defaultCd);
+        int cd;
+        // ИСПРАВЛЕНИЕ: Для телепорта всегда используем динамический расчет (мин, макс, за блок)
+        if ("teleport".equals(abilityId)) {
+            cd = ability.getDynamicCooldown(player);
+        } else {
+            int defaultCd = ability.getDynamicCooldown(player);
+            cd = ModConfig.getInstance().getCooldown(abilityId, defaultCd);
+        }
 
         data.setCooldown(abilityId, currentTick, cd);
         PlayerClassData.markDirty(player);

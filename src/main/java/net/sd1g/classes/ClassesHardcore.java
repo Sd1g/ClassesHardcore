@@ -82,7 +82,6 @@ public class ClassesHardcore implements ModInitializer {
                 PlayerClassData data = PlayerClassData.get(sp);
                 long gameTime = level.getGameTime();
 
-                // Если КД еще не прошло, показываем уведомление над хотбаром и отменяем установку
                 if (gameTime < data.crystalCooldownEndTick) {
                     long remainingTicks = data.crystalCooldownEndTick - gameTime;
                     long seconds = (remainingTicks / 20) + 1;
@@ -97,9 +96,7 @@ public class ClassesHardcore implements ModInitializer {
                     data.endCrystalUses = 0;
                     data.crystalCooldownEndTick = gameTime + 1800; // 90 секунд
 
-                    // Показываем уведомление над хотбаром
                     sp.sendOverlayMessage(Component.literal("§eЛимит кристаллов исчерпан. КД 90 сек."));
-                    // Отправляем на клиент для отрисовки HUD (таймер над иконками)
                     ServerPlayNetworking.send(sp, new CooldownSyncPayload("end_crystal", 1800));
                 }
             }
@@ -178,7 +175,6 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(player, new HeroSyncPayload(data.heroTrades));
             ServerPlayNetworking.send(player, new ClassTokensSyncPayload(data.randomChangeTokens, data.pick3ChangeTokens));
 
-            // Восстанавливаем таймер кристаллов при входе, если он активен
             long gameTime = player.level().getGameTime();
             if (data.crystalCooldownEndTick > gameTime) {
                 long remaining = data.crystalCooldownEndTick - gameTime;
@@ -327,21 +323,51 @@ public class ClassesHardcore implements ModInitializer {
     }
 
     private void registerClasses() {
+        // ВОИН
         ClassRegistry.register(new ClassDefinition("warrior", "Воин",
                 () -> "Универсальный боец с исцелением и быстрыми атаками.",
                 List.of(new HealAbility(), new SpeedBoostAbility(), new CombatExperienceAbility(), new CombatTempoAbility())));
 
+        // СИЛАЧ
         ClassRegistry.register(new ClassDefinition("strongman", "Силач",
                 "Усиливает удары по мере накопления опыта.",
                 List.of(new PowerGainAbility())));
 
+        // УДАЧЛИВЫЙ КОПАТЕЛЬ
         ClassRegistry.register(new ClassDefinition("lucky_digger", "Удачливый копатель",
                 "Ускоренная добыча и контроль противников.",
                 List.of(new LuckyDiggerToggleAbility(), new LuckyDiggerMiningAbility(), new LuckyDiggerSuppressionAbility(), new LuckyDiggerHeavyStrikeAbility())));
 
-        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор", "Мобильность и шанс спасения после тотема.", List.of(new TeleporterAbility(), new TeleporterLastChanceAbility())));
-        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора", "Истощает противника и получает преимущество над голодными целями.", List.of(new GluttonyDepletionAbility(), new GluttonySatiateAbility(), new GluttonyAbility(), new GluttonyCravingsAbility())));
-        ClassRegistry.register(new ClassDefinition("spry", "Живчик", "Большой запас здоровья и кратковременное поглощение.", List.of(new SecondWindAbility(), new VitalityAbility(), new LifeExperienceAbility())));
+        // ТЕЛЕПОРТАТОР (ОБНОВЛЕНО)
+        ClassRegistry.register(new ClassDefinition("teleporter", "Телепортатор",
+                "Мобильность и шанс спасения после тотема.",
+                List.of(
+                        new TeleporterAbility(),
+                        new TeleporterLastChanceAbility(),
+                        new TeleporterSpatialExpAbility()
+                )));
+
+        // ОБЖОРА (ОБНОВЛЕНО)
+        ClassRegistry.register(new ClassDefinition("gluttony", "Обжора",
+                "Истощает противника и получает преимущество над голодными целями.",
+                List.of(
+                        new GluttonyDepletionAbility(),
+                        new GluttonySatiateAbility(),
+                        new GluttonyAbility(),
+                        new GluttonyCravingsAbility(),
+                        new GluttonyHungryHunterAbility()
+                )));
+
+        // ЖИВЧИК (ОБНОВЛЕНО)
+        ClassRegistry.register(new ClassDefinition("spry", "Живчик",
+                "Большой запас здоровья и кратковременное поглощение.",
+                List.of(
+                        new SecondWindAbility(),
+                        new VitalityAbility(),
+                        new LifeExperienceAbility()
+                )));
+
+        // ОСТАЛЬНЫЕ КЛАССЫ (Ожидают переработки)
         ClassRegistry.register(new ClassDefinition("ice_warrior", "Ледяной воин", "Замедляет противников и ослабляет их атаки.", List.of(new IceStrikeAbility(), new IceWeakeningAbility(), new IceDeepFreezeAbility())));
         ClassRegistry.register(new ClassDefinition("vampire", "Вампир", "Восстанавливает здоровье за счёт нанесённого урона.", List.of(new VampireDrainAbility(), new VampirePassiveAbility())));
         ClassRegistry.register(new ClassDefinition("invisible", "Невидимка", "Засады и скрытное перемещение.", List.of(new InvisibilityAbility())));

@@ -136,6 +136,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 AbilityClientState.farmerMobKills = 0;
                 AbilityClientState.farmerPlayerKills = 0;
                 AbilityClientState.heroTrades = 0;
+                // AbilityClientState.teleporterCount = 0; (Не сбрасываем, так как сервер пришлет актуальное значение)
             });
         });
 
@@ -143,8 +144,14 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             context.client().execute(() -> {
                 String id = payload.abilityId();
                 int remaining = payload.remainingTicks();
-                cooldownTicks.put(id, remaining);
-                cooldownTotal.put(id, remaining);
+
+                // Хак: используем этот пакет для синхронизации счетчика телепортаций
+                if (id.equals("teleporter_count")) {
+                    AbilityClientState.teleporterCount = remaining;
+                } else {
+                    cooldownTicks.put(id, remaining);
+                    cooldownTotal.put(id, remaining);
+                }
             });
         });
 
@@ -320,7 +327,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 var resource = Minecraft.getInstance().getResourceManager().getResource(id);
                 if (resource.isEmpty()) return new int[]{32, 32};
                 try (var stream = resource.get().open()) {
-                    // ИСПОЛЬЗУЕМ NativeImage ДЛЯ ПРЕДОТВРАЩЕНИЯ ЛАГОВ
+                    // Используем быстрый NativeImage вместо ImageIO
                     NativeImage img = NativeImage.read(stream);
                     int w = img.getWidth();
                     int h = img.getHeight();
@@ -371,7 +378,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         int startX = hotbarRight + 8;
         int startY = screenHeight - SQUARE_SIZE - KEY_LABEL_HEIGHT - 4;
 
-        // === ОТРИСОВКА КД КРИСТАЛЛОВ ===
+        // Отрисовка КД кристаллов
         int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
         if (crystalCd > 0) {
             int seconds = (crystalCd + 19) / 20;

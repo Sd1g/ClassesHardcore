@@ -1,9 +1,11 @@
 package net.sd1g.classes.ability.impl;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -14,58 +16,72 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
+import net.sd1g.classes.data.PlayerClassData;
+import net.sd1g.classes.network.CooldownSyncPayload;
 
 import java.util.List;
-import java.util.Random;
 
 public class TeleporterAbility implements Ability {
-    private static final Random RNG = new Random();
-
     @Override public String getId() { return "teleport"; }
     @Override public String getDisplayName() { return "Телепортация"; }
     @Override public boolean isPassive() { return false; }
-    @Override public int getBaseCooldown() { return 100; }
+    @Override public int getBaseCooldown() { return 200; } // 10 сек (дефолт)
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/teleport"); }
+
+    public static double getMaxDistance(ServerPlayer player) {
+        PlayerClassData data = PlayerClassData.get(player);
+        double bonus = Math.min(data.teleporterCount / 200.0, 10.0);
+        return 30.0 + bonus;
+    }
 
     @Override
     public String getDescription() {
-        ModConfig cfg = ModConfig.getInstance();
-        double maxDist = cfg.getEffect("teleport_max_distance", 30.0);
-        double minDist = cfg.getEffect("teleport_min_distance", 3.0);
-        double chance = cfg.getEffect("teleport_success_chance", 0.30);
-        return "Мгновенно переносит на " + (int) minDist + "–" + (int) maxDist
-                + " блоков вперёд. Шанс успеха: " + (int)(chance*100) + "%. КД зависит от дистанции.";
+        return "Перемещает по направлению взгляда на 3–30 блоков. Перезарядка зависит от дистанции.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        ModConfig cfg = ModConfig.getInstance();
-        double maxDist = cfg.getEffect("teleport_max_distance", 30.0);
-        double minDist = cfg.getEffect("teleport_min_distance", 3.0);
-        return List.of(
-                "§7Максимальная дальность: §f" + (int) maxDist + " блоков",
-                "§7Минимальная дальность: §f" + (int) minDist + " блоков",
-                "§7КД: §f2 сек за 1 блок"
-        );
+        if (player instanceof ServerPlayer sp) {
+            double maxDist = getMaxDistance(sp);
+            PlayerClassData data = PlayerClassData.get(sp);
+
+            ModConfig cfg = ModConfig.getInstance();
+            int perBlockTicks = cfg.getCooldown("teleport_cooldown_per_block", 40);
+            int minCdTicks = cfg.getCooldown("teleport_min_cooldown", 200);
+            int maxCdTicks = cfg.getCooldown("teleport_max_cooldown", 1200);
+
+            return List.of(
+                    "§7Максимальная дальность: §f" + (int)maxDist + " блоков",
+                    "§7Успешных телепортаций: §b" + data.teleporterCount,
+                    "§7КД: §f" + (perBlockTicks / 20.0) + " сек/блок (от " + (minCdTicks/20) + " до " + (maxCdTicks/20) + " сек)"
+            );
+        }
+        return List.of();
     }
 
     @Override
     public int getDynamicCooldown(ServerPlayer player) {
+        ModConfig cfg = ModConfig.getInstance();
         double distance = computeDistance(player);
-        int perBlock = ModConfig.getInstance().getIntEffect("teleport_cooldown_per_block", 40);
-        return (int) Math.max(40, distance * perBlock);
+
+        // Читаем параметры из конфига
+        int perBlock = cfg.getCooldown("teleport_cooldown_per_block", 40);
+        int minCd = cfg.getCooldown("teleport_min_cooldown", 200);
+        int maxCd = cfg.getCooldown("teleport_max_cooldown", 1200);
+
+        int calculated = (int) (distance * perBlock);
+
+        // Ограничиваем значениями мин и макс
+        return Math.max(minCd, Math.min(calculated, maxCd));
     }
 
     @Override
     public boolean onActivate(ServerPlayer player) {
-        ModConfig cfg = ModConfig.getInstance();
-        double successChance = cfg.getEffect("teleport_success_chance", 0.30);
-        if (RNG.nextDouble() > successChance) {
-            player.sendSystemMessage(Component.literal("§cТелепортация не удалась."));
-            return true; // Идет в кулдаун
-        }
-
         Vec3 horizontalDir = getHorizontalDirection(player);
         Vec3 eye = player.getEyePosition();
         double distance = computeDistance(player);
@@ -74,54 +90,42 @@ public class TeleporterAbility implements Ability {
         ServerLevel level = player.level();
         BlockPos standBp = findTargetPosition(level, rawTarget);
         if (standBp == null) {
-            player.sendSystemMessage(Component.literal("§cЗдесь телепортироваться нельзя."));
-            return true; // Идет в кулдаун
+            player.sendOverlayMessage(Component.literal("§cЗдесь телепортироваться нельзя."));
+            return false; // Не уходит в КД при провале
         }
 
         Vec3 target = new Vec3(rawTarget.x, standBp.getY(), rawTarget.z);
-
-        double px = player.getX();
-        double py = player.getY() + 1.0;
-        double pz = player.getZ();
+        double px = player.getX(), py = player.getY() + 1.0, pz = player.getZ();
 
         level.sendParticles(ParticleTypes.REVERSE_PORTAL, px, py, pz, 60, 0.6, 1.0, 0.6, 0.15);
-        level.sendParticles(ParticleTypes.PORTAL, px, py, pz, 40, 0.6, 1.0, 0.6, 0.3);
-        level.sendParticles(ParticleTypes.WITCH, px, py, pz, 20, 0.5, 0.7, 0.5, 0.05);
         level.sendParticles(new DustParticleOptions(0xB34DFF, 2.0f), px, py, pz, 30, 0.6, 0.8, 0.6, 0.2);
-        level.sendParticles(ParticleTypes.END_ROD, px, py, pz, 15, 0.5, 0.7, 0.5, 0.1);
-
         level.playSound(null, px, py, pz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.0f);
-        level.playSound(null, px, py, pz, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.3f, 1.5f);
 
         player.teleportTo(target.x, target.y, target.z);
         player.resetFallDistance();
 
-        double tx = target.x;
-        double ty = target.y + 1.0;
-        double tz = target.z;
-
+        double tx = target.x, ty = target.y + 1.0, tz = target.z;
         level.sendParticles(ParticleTypes.REVERSE_PORTAL, tx, ty, tz, 60, 0.6, 1.0, 0.6, 0.15);
-        level.sendParticles(ParticleTypes.PORTAL, tx, ty, tz, 40, 0.6, 1.0, 0.6, 0.3);
-        level.sendParticles(ParticleTypes.WITCH, tx, ty, tz, 20, 0.5, 0.7, 0.5, 0.05);
         level.sendParticles(new DustParticleOptions(0xB34DFF, 2.0f), tx, ty, tz, 30, 0.6, 0.8, 0.6, 0.2);
-        level.sendParticles(ParticleTypes.END_ROD, tx, ty, tz, 15, 0.5, 0.7, 0.5, 0.1);
-
         level.playSound(null, tx, ty, tz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.3f);
-        level.playSound(null, tx, ty, tz, SoundEvents.ILLUSIONER_MIRROR_MOVE, SoundSource.PLAYERS, 1.0f, 1.4f);
+
+        // Увеличиваем счетчик и синхронизируем с клиентом
+        PlayerClassData data = PlayerClassData.get(player);
+        data.teleporterCount++;
+        PlayerClassData.markDirty(player);
+
+        // Синхронизация для тултипа
+        ServerPlayNetworking.send(player, new CooldownSyncPayload("teleporter_count", data.teleporterCount));
+
         return true;
     }
 
     public static BlockPos findTargetPosition(Level level, Vec3 rawTarget) {
-        ModConfig cfg = ModConfig.getInstance();
-        int maxUp = cfg.getIntEffect("teleport_max_up", 5);
-        int maxDown = cfg.getIntEffect("teleport_max_down", 5);
-
+        int maxUp = 5, maxDown = 5;
         int x = Mth.floor(rawTarget.x);
         int z = Mth.floor(rawTarget.z);
         int rawY = Mth.floor(rawTarget.y);
-        int minY = level.getMinY();
-        int maxY = level.getMaxY();
-
+        int minY = level.getMinY(), maxY = level.getMaxY();
         int searchTop = Math.min(rawY + maxUp, maxY);
         int searchBottom = Math.max(rawY - maxDown, minY);
 
@@ -168,15 +172,11 @@ public class TeleporterAbility implements Ability {
     }
 
     public static double computeDistance(Player player) {
-        ModConfig cfg = ModConfig.getInstance();
-        double maxDist = cfg.getEffect("teleport_max_distance", 30.0);
-        double minDist = cfg.getEffect("teleport_min_distance", 3.0);
-        double maxPitch = cfg.getEffect("teleport_max_pitch", -20.0);
-        double minPitch = cfg.getEffect("teleport_min_pitch", 10.0);
-
+        double maxDist = (player instanceof ServerPlayer sp) ? getMaxDistance(sp) : 30.0;
+        double minDist = 3.0;
+        double maxPitch = -20.0, minPitch = 10.0;
         float pitch = player.getXRot();
-        double t = (pitch - maxPitch) / (minPitch - maxPitch);
-        t = Mth.clamp(t, 0.0, 1.0);
+        double t = Mth.clamp((pitch - maxPitch) / (minPitch - maxPitch), 0.0, 1.0);
         return maxDist - t * (maxDist - minDist);
     }
 }
