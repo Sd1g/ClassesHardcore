@@ -137,7 +137,6 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayer player = handler.getPlayer();
             PlayerClassData data = PlayerClassData.get(player);
 
-            // Отправляем конфиг
             ServerPlayNetworking.send(player, new SyncConfigPayload(ModConfig.getJson()));
 
             if ("ice_strike".equals(data.playerClass)) {
@@ -294,12 +293,7 @@ public class ClassesHardcore implements ModInitializer {
             ServerPlayNetworking.send(attacker, new FarmerSyncPayload(data.farmerMobKills, data.farmerPlayerKills));
         });
 
-        // ИСПРАВЛЕНИЕ: Удален весь лишний код Дикобраза и Ловкача.
-        // Урон Дикобраза режется в PorcupineChitinMixin, а уклонение Ловкача в DodgerDodgeMixin.
-        // Мы оставляем ALLOW_DAMAGE только на случай, если в будущем понадобится вернуть какую-то логику.
-        ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
-            return true;
-        });
+        ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> true);
 
         LOGGER.info("ClassesHardcore initialized successfully!");
     }
@@ -362,6 +356,10 @@ public class ClassesHardcore implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(Pick3OptionsPayload.TYPE, Pick3OptionsPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(SyncConfigPayload.TYPE, SyncConfigPayload.CODEC);
 
+        PayloadTypeRegistry.clientboundPlay().register(ActiveTimerPayload.TYPE, ActiveTimerPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ArmedStatePayload.TYPE, ArmedStatePayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(HudMessagePayload.TYPE, HudMessagePayload.CODEC);
+
         ServerPlayNetworking.registerGlobalReceiver(UseAbilityPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> AbilityManager.tryActivate(context.player(), payload.abilityId()));
         });
@@ -402,18 +400,5 @@ public class ClassesHardcore implements ModInitializer {
 
     public static Identifier id(String path) {
         return Identifier.fromNamespaceAndPath(MOD_ID, path);
-    }
-
-    private static String roman(int n) {
-        return switch (n) {
-            case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; case 4 -> "IV"; case 5 -> "V";
-            case 6 -> "VI"; case 7 -> "VII"; case 8 -> "VIII"; case 9 -> "IX"; case 10 -> "X";
-            default -> String.valueOf(n);
-        };
-    }
-
-    private static String fmt(double v) {
-        if (v == Math.floor(v)) return String.valueOf((int) v);
-        return String.format("%.1f", v);
     }
 }

@@ -13,6 +13,7 @@ public class HeroVillageDefenderAbility implements Ability {
     @Override public boolean isPassive() { return true; }
     @Override public int getBaseCooldown() { return 0; }
 
+    // ИКОНКА УЖЕ БЫЛА, НО ПРОВЕРЯЕМ ПУТЬ
     @Override
     public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/hero_village_defender"); }
 

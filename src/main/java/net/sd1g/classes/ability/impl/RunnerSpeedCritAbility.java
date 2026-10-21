@@ -1,11 +1,18 @@
 package net.sd1g.classes.ability.impl;
 
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
@@ -17,7 +24,9 @@ public class RunnerSpeedCritAbility implements Ability {
     @Override public String getId() { return "runner_speed_crit"; }
     @Override public String getDisplayName() { return "Скоростной крит"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/runner_speed_crit"); }
 
     @Override
     public String getDescription() {
@@ -50,7 +59,63 @@ public class RunnerSpeedCritAbility implements Ability {
                 target.hurtServer((net.minecraft.server.level.ServerLevel) attacker.level(), attacker.damageSources().playerAttack(attacker), damageDealt * (float)multiplier);
                 PureDamage.apply(attacker, target, pureDamage);
 
-                attacker.level().sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1, target.getZ(), 15, 0.4, 0.4, 0.4, 0.1);
+                ServerLevel level = attacker.level();
+                double x = target.getX();
+                double y = target.getY() + (target.getBbHeight() / 2.0);
+                double z = target.getZ();
+
+                // ==========================================
+                // МАСШТАБИРУЕМЫЕ ЭФФЕКТЫ ОТ РАЗНИЦЫ СКОРОСТЕЙ
+                // ==========================================
+
+                if (diff >= 1 && diff <= 3) {
+                    // TIER 1-3: Обычный, но сочный крит
+                    level.sendParticles(ParticleTypes.CRIT, x, y, z, 20, 0.4, 0.4, 0.4, 0.2);
+                    level.sendParticles(new DustParticleOptions(0x00FFFF, 1.5f), x, y, z, 10, 0.3, 0.3, 0.3, 0.1); // Голубая пыль скорости
+                    level.sendParticles(ParticleTypes.SWEEP_ATTACK, x, y, z, 2, 0.2, 0.2, 0.2, 0.1);
+                    level.playSound(null, x, y, z, SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.0f);
+                }
+                else if (diff >= 4 && diff <= 6) {
+                    // TIER 4-6: Огненно-электрический взрыв
+                    level.sendParticles(ParticleTypes.CRIT, x, y, z, 30, 0.5, 0.5, 0.5, 0.2);
+                    level.sendParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 25, 0.4, 0.4, 0.4, 0.15);
+                    level.sendParticles(new DustParticleOptions(0xFF8C00, 2.0f), x, y, z, 30, 0.5, 0.5, 0.5, 0.15); // Оранжевая пыль
+                    level.sendParticles(ParticleTypes.SWEEP_ATTACK, x, y, z, 4, 0.3, 0.3, 0.3, 0.1);
+                    level.playSound(null, x, y, z, SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.2f, 0.8f);
+                    level.playSound(null, x, y, z, SoundEvents.PLAYER_ATTACK_KNOCKBACK, SoundSource.PLAYERS, 1.0f, 1.2f);
+                }
+                else if (diff >= 7 && diff <= 8) {
+                    // TIER 7-8: Разрушительный взрыв с молниями и огнем
+                    level.sendParticles(ParticleTypes.EXPLOSION, x, y, z, 2, 0.1, 0.1, 0.1, 0.0);
+                    level.sendParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 50, 0.6, 0.6, 0.6, 0.2);
+                    level.sendParticles(new DustParticleOptions(0xFF0000, 2.5f), x, y, z, 40, 0.6, 0.6, 0.6, 0.2); // Красная пыль
+                    level.sendParticles(ParticleTypes.LAVA, x, y, z, 15, 0.4, 0.4, 0.4, 0.1);
+
+                    level.playSound(null, x, y, z, SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.PLAYERS, 0.8f, 1.2f);
+                    level.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.PLAYERS, 1.0f, 1.0f);
+                }
+                else if (diff == 9) {
+                    // TIER 9: АБСОЛЮТНЫЙ РАЗРЫВ ПРОСТРАНСТВА (Ударная волна)
+                    level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
+                    level.sendParticles(ParticleTypes.END_ROD, x, y, z, 60, 1.0, 1.0, 1.0, 0.3);
+                    level.sendParticles(ParticleTypes.FIREWORK, x, y, z, 50, 1.0, 1.0, 1.0, 0.2);
+                    level.sendParticles(new DustParticleOptions(0xFFFFFF, 3.0f), x, y, z, 50, 1.0, 1.0, 1.0, 0.3); // Белая вспышка
+                    level.sendParticles(new DustParticleOptions(0x00FFFF, 2.5f), x, y, z, 50, 1.0, 1.0, 1.0, 0.3); // Голубая скорость
+                    level.sendParticles(new DustParticleOptions(0xFF0000, 2.5f), x, y, z, 50, 1.0, 1.0, 1.0, 0.3); // Красный урон
+
+                    // Эпичное кольцо по земле
+                    for (int i = 0; i < 360; i += 10) {
+                        double rad = Math.toRadians(i);
+                        level.sendParticles(new DustParticleOptions(0x00FFFF, 2.0f),
+                                x + Math.cos(rad) * 3.0, target.getY() + 0.2, z + Math.sin(rad) * 3.0, 1, 0.0, 0.1, 0.0, 0.0);
+                    }
+
+                    // Оглушительные звуки
+                    level.playSound(null, x, y, z, SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 0.6f, 1.5f);
+                    level.playSound(null, x, y, z, SoundEvents.ENDER_DRAGON_GROWL, SoundSource.PLAYERS, 0.5f, 1.8f);
+                    level.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.PLAYERS, 1.5f, 0.8f);
+                }
+
                 attacker.sendOverlayMessage(Component.literal("§bСкоростной крит! §fРазница: " + diff + " ур."));
             }
         }

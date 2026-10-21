@@ -1,6 +1,9 @@
 package net.sd1g.classes.ability.impl;
 
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -8,6 +11,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.AbilityClientState;
@@ -24,13 +28,16 @@ public class HeroGiftAbility implements Ability {
     @Override public boolean isPassive() { return false; }
 
     @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/hero_gift"); }
+
+    @Override
     public int getBaseCooldown() {
         return ModConfig.getInstance().getCooldown("hero_gift", 12000);
     }
 
     public static int computeLevel(int trades, ModConfig cfg) {
-        int perLevel = cfg.getIntEffect("hero_trades_per_level", 50);
-        return perLevel > 0 ? trades / perLevel : 0;
+        int perLevel = Math.max(1, cfg.getIntEffect("hero_trades_per_level", 50));
+        return trades / perLevel;
     }
 
     @Override
@@ -85,8 +92,28 @@ public class HeroGiftAbility implements Ability {
             }
         }
 
-        ServerLevel world = player.level();
-        world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.8f, 1.0f);
+        ServerLevel levelObj = player.level();
+        double x = player.getX();
+        double y = player.getY() + 1.0;
+        double z = player.getZ();
+
+        // ТОРЖЕСТВЕННЫЕ ЭФФЕКТЫ
+        // 1. Золотой дождь (Тотем) и радость жителей
+        levelObj.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 80, 0.8, 1.5, 0.8, 0.2);
+        levelObj.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 40, 0.6, 0.6, 0.6, 0.1);
+        // 2. Праздничный фейерверк
+        levelObj.sendParticles(ParticleTypes.FIREWORK, x, y, z, 30, 1.0, 1.0, 1.0, 0.2);
+        // 3. Золотые искры
+        levelObj.sendParticles(new DustParticleOptions(0xFFD700, 2.5f), x, y, z, 50, 0.8, 0.8, 0.8, 0.2);
+
+        // ТОРЖЕСТВЕННЫЕ ЗВУКИ
+        // 1. Радость жителей
+        levelObj.playSound(null, x, y, z, SoundEvents.VILLAGER_CELEBRATE, SoundSource.PLAYERS, 1.5f, 1.0f);
+        // 2. Церковный колокол (эпично и торжественно)
+        levelObj.playSound(null, x, y, z, SoundEvents.BELL_RESONATE, SoundSource.PLAYERS, 1.5f, 0.8f);
+        // 3. Фанфары уровня
+        levelObj.playSound(null, x, y, z, SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+
         player.sendOverlayMessage(Component.literal("§aДар героя. §fПолучено " + amount + " изумрудов."));
         return true;
     }

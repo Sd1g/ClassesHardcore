@@ -20,11 +20,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Random;
 
-/**
- * Пассивка «Последний шанс» (класс Телепортатор).
- * При срабатывании тотема бессмертия с шансом N% телепортирует
- * игрока в случайное безопасное место в радиусе R блоков.
- */
 @Mixin(LivingEntity.class)
 public class TeleporterLastChanceMixin {
 
@@ -68,9 +63,11 @@ public class TeleporterLastChanceMixin {
             double py = player.getY() + 1.0;
             double pz = player.getZ();
 
-            level.sendParticles(ParticleTypes.REVERSE_PORTAL, px, py, pz, 40, 0.6, 1.0, 0.6, 0.15);
-            level.sendParticles(ParticleTypes.PORTAL, px, py, pz, 30, 0.6, 1.0, 0.6, 0.3);
-            level.sendParticles(new DustParticleOptions(0xB34DFF, 1.8f), px, py, pz, 25, 0.6, 0.8, 0.6, 0.2);
+            // ЭПИЧНЫЙ ЭФФЕКТ СПАСЕНИЯ (Души + Тотем)
+            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, px, py, pz, 60, 0.8, 1.2, 0.8, 0.2); // Золотые искры тотема
+            level.sendParticles(ParticleTypes.SOUL, px, py, pz, 40, 0.6, 1.0, 0.6, 0.1); // Синие души
+            level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, px, py, pz, 20, 0.5, 0.5, 0.5, 0.05); // Синее пламя
+            level.sendParticles(new DustParticleOptions(0x00FFFF, 2.0f), px, py, pz, 30, 0.8, 0.8, 0.8, 0.2); // Бирюзовый
 
             player.teleportTo(tx, standBp.getY(), tz);
             player.resetFallDistance();
@@ -79,13 +76,16 @@ public class TeleporterLastChanceMixin {
             double ny = player.getY() + 1.0;
             double nz = player.getZ();
 
-            level.sendParticles(ParticleTypes.REVERSE_PORTAL, nx, ny, nz, 40, 0.6, 1.0, 0.6, 0.15);
-            level.sendParticles(ParticleTypes.PORTAL, nx, ny, nz, 30, 0.6, 1.0, 0.6, 0.3);
-            level.sendParticles(new DustParticleOptions(0xB34DFF, 1.8f), nx, ny, nz, 25, 0.6, 0.8, 0.6, 0.2);
+            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, nx, ny, nz, 60, 0.8, 1.2, 0.8, 0.2);
+            level.sendParticles(ParticleTypes.SOUL, nx, ny, nz, 40, 0.6, 1.0, 0.6, 0.1);
+            level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, nx, ny, nz, 20, 0.5, 0.5, 0.5, 0.05);
+            level.sendParticles(new DustParticleOptions(0x00FFFF, 2.0f), nx, ny, nz, 30, 0.8, 0.8, 0.8, 0.2);
 
-            level.playSound(null, px, py, pz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.0f);
+            // ЗВУКИ СПАСЕНИЯ (Тотем, душа, телепорт)
+            level.playSound(null, px, py, pz, SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 1.0f, 1.0f);
+            level.playSound(null, px, py, pz, SoundEvents.SOUL_ESCAPE, SoundSource.PLAYERS, 1.5f, 1.0f);
             level.playSound(null, nx, ny, nz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.3f);
-            level.playSound(null, nx, ny, nz, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.3f, 1.6f);
+            level.playSound(null, nx, ny, nz, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 1.0f, 1.2f);
 
             player.sendOverlayMessage(Component.literal("§dПоследний шанс! §fТелепортация."));
             return;

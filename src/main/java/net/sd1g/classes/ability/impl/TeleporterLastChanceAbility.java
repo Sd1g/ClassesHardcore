@@ -1,6 +1,8 @@
 package net.sd1g.classes.ability.impl;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 
@@ -10,7 +12,9 @@ public class TeleporterLastChanceAbility implements Ability {
     @Override public String getId() { return "last_chance"; }
     @Override public String getDisplayName() { return "Последний шанс"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/last_chance"); }
 
     @Override
     public String getDescription() {

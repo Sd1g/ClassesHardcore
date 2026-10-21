@@ -1,17 +1,35 @@
 package net.sd1g.classes.ability.impl;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.AbilityClientState;
+import net.sd1g.classes.data.PlayerClassData;
+import net.sd1g.classes.network.HudMessagePayload;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class FarmerAbility implements Ability {
+    private static final Map<UUID, Integer> LAST_STEPS = new HashMap<>();
+
     @Override public String getId() { return "farmer_passive"; }
     @Override public String getDisplayName() { return "Мастерство мотыги"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/farmer_passive"); }
 
     @Override
     public String getDescription() {
@@ -24,14 +42,14 @@ public class FarmerAbility implements Ability {
     @Override
     public List<String> getExtraTooltipLines(Player player) {
         ModConfig cfg = ModConfig.getInstance();
-        int mobsPerStep = cfg.getIntEffect("farmer_mobs_per_bonus_point", 100);
-        double bonusPerMobStep = cfg.getEffect("farmer_bonus_per_mob_step", 0.5) / 2.0; // в HP
-        double bonusPerPlayer = cfg.getEffect("farmer_bonus_per_player_kill", 10.0) / 2.0; // в HP
+        int mobsPerStep = Math.max(1, cfg.getIntEffect("farmer_mobs_per_bonus_point", 100));
+        double bonusPerMobStep = cfg.getEffect("farmer_bonus_per_mob_step", 0.5) / 2.0;
+        double bonusPerPlayer = cfg.getEffect("farmer_bonus_per_player_kill", 10.0) / 2.0;
 
         int mobs = AbilityClientState.farmerMobKills;
         int players = AbilityClientState.farmerPlayerKills;
 
-        int step = mobsPerStep > 0 ? mobs / mobsPerStep : 0;
+        int step = mobs / mobsPerStep;
         double accumulatedBonus = (step * bonusPerMobStep) + (players * bonusPerPlayer);
         int toNext = mobsPerStep - (mobs % mobsPerStep);
 
@@ -43,5 +61,48 @@ public class FarmerAbility implements Ability {
                 "§7Текущий бонус: §c+" + accumulatedBonus + " HP",
                 "§7До след. шага: §f" + toNext + " мобов"
         );
+    }
+
+    @Override
+    public void onPassiveTick(ServerPlayer player) {
+        ModConfig cfg = ModConfig.getInstance();
+        PlayerClassData data = PlayerClassData.get(player);
+
+        int mobsPerStep = Math.max(1, cfg.getIntEffect("farmer_mobs_per_bonus_point", 100));
+        int currentStep = data.farmerMobKills / mobsPerStep;
+
+        int lastStep = LAST_STEPS.getOrDefault(player.getUUID(), 0);
+
+        // Если игрок достиг нового рубежа по убийствам мобов
+        if (currentStep > lastStep) {
+            ServerLevel level = player.level();
+
+            ServerPlayNetworking.send(player, new HudMessagePayload("§2Фермер: Мастерство выросло!", 0xFF228B22, 80));
+
+            // ЭПИЧНЫЕ ЗВУКИ (Безумие фермера)
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 1.0f, 1.0f);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ZOMBIE_VILLAGER_CURE, SoundSource.PLAYERS, 0.6f, 1.5f);
+
+            // ЭПИЧНЫЕ ЭФФЕКТЫ (Зеленая магия и безумие)
+            double x = player.getX();
+            double y = player.getY() + 1.0;
+            double z = player.getZ();
+
+            // 1. Взрыв зеленой пыли
+            level.sendParticles(new DustParticleOptions(0x00FF00, 2.5f), x, y, z, 60, 0.8, 0.8, 0.8, 0.15);
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 40, 0.6, 1.0, 0.6, 0.1);
+
+            // 2. Частицы безумия (злые жители и ведьма)
+            level.sendParticles(ParticleTypes.ANGRY_VILLAGER, x, y, z, 20, 0.8, 0.8, 0.8, 0.1);
+            level.sendParticles(ParticleTypes.WITCH, x, y, z, 30, 0.6, 1.0, 0.6, 0.1);
+
+            // 3. Зеленое кольцо по земле
+            for (int i = 0; i < 360; i += 10) {
+                double rad = Math.toRadians(i);
+                level.sendParticles(new DustParticleOptions(0x00FF00, 1.5f),
+                        x + Math.cos(rad) * 2.5, player.getY() + 0.2, z + Math.sin(rad) * 2.5, 1, 0.0, 0.0, 0.0, 0.0);
+            }
+        }
+        LAST_STEPS.put(player.getUUID(), currentStep);
     }
 }

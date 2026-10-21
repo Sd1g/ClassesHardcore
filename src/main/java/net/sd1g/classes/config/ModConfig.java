@@ -63,7 +63,6 @@ public class ModConfig {
         strongman.effects.putIfAbsent("strongman_tier1_dmg", 1.0);
         strongman.effects.putIfAbsent("strongman_tier2_dmg", 0.5);
         strongman.effects.putIfAbsent("strongman_tier3_dmg", 0.25);
-        strongman.effects.putIfAbsent("strongman_hp_to_damage_multiplier", 0.5);
 
         // ============= УДАЧЛИВЫЙ КОПАТЕЛЬ =============
         ClassSettings luckyDigger = cs(c, "lucky_digger");
@@ -111,6 +110,8 @@ public class ModConfig {
         gluttony.effects.putIfAbsent("cravings_hunger_amplifier", 2.0);
         gluttony.effects.putIfAbsent("cravings_hunger_duration_ticks", 140.0);
         gluttony.effects.putIfAbsent("gluttony_hungry_hunter_damage", 2.0);
+        gluttony.effects.putIfAbsent("gluttony_burp_chance", 0.15);
+        gluttony.effects.putIfAbsent("gluttony_burp_interval", 600.0);
 
         // ================== ЖИВЧИК ==================
         ClassSettings spry = cs(c, "spry");
@@ -127,7 +128,7 @@ public class ModConfig {
         iceWarrior.effects.putIfAbsent("ice_strike_slowness_duration_ticks", 100.0);
         iceWarrior.effects.putIfAbsent("ice_strike_levels_per_amplifier_step", 50.0);
         iceWarrior.effects.putIfAbsent("ice_strike_max_amplifier", 2.0);
-        iceWarrior.effects.putIfAbsent("ice_weakening_damage_per_level", 0.5);
+        iceWarrior.effects.putIfAbsent("ice_weakening_damage_per_level", 1.0);
         iceWarrior.effects.putIfAbsent("ice_deep_freeze_chance", 0.03);
         iceWarrior.effects.putIfAbsent("ice_deep_freeze_duration_ticks", 50.0);
         iceWarrior.effects.putIfAbsent("ice_deep_freeze_amplifier", 9.0);
@@ -163,23 +164,23 @@ public class ModConfig {
         runner.effects.putIfAbsent("runner_sprint_amplifier", 4.0);
         runner.effects.putIfAbsent("runner_passive_amplifier", 1.0);
         runner.effects.putIfAbsent("runner_crit_chance", 0.05);
-        runner.effects.putIfAbsent("runner_crit_t1_mult", 1.0);
+        runner.effects.putIfAbsent("runner_crit_t1_mult", 2.0);
         runner.effects.putIfAbsent("runner_crit_t1_dmg", 1.5);
-        runner.effects.putIfAbsent("runner_crit_t2_mult", 1.2);
+        runner.effects.putIfAbsent("runner_crit_t2_mult", 2.2);
         runner.effects.putIfAbsent("runner_crit_t2_dmg", 2.5);
-        runner.effects.putIfAbsent("runner_crit_t3_mult", 1.4);
+        runner.effects.putIfAbsent("runner_crit_t3_mult", 2.4);
         runner.effects.putIfAbsent("runner_crit_t3_dmg", 3.0);
-        runner.effects.putIfAbsent("runner_crit_t4_mult", 1.6);
+        runner.effects.putIfAbsent("runner_crit_t4_mult", 2.6);
         runner.effects.putIfAbsent("runner_crit_t4_dmg", 3.5);
-        runner.effects.putIfAbsent("runner_crit_t5_mult", 1.8);
+        runner.effects.putIfAbsent("runner_crit_t5_mult", 2.8);
         runner.effects.putIfAbsent("runner_crit_t5_dmg", 4.0);
-        runner.effects.putIfAbsent("runner_crit_t6_mult", 2.0);
+        runner.effects.putIfAbsent("runner_crit_t6_mult", 3.0);
         runner.effects.putIfAbsent("runner_crit_t6_dmg", 4.5);
-        runner.effects.putIfAbsent("runner_crit_t7_mult", 2.2);
+        runner.effects.putIfAbsent("runner_crit_t7_mult", 3.2);
         runner.effects.putIfAbsent("runner_crit_t7_dmg", 4.5);
-        runner.effects.putIfAbsent("runner_crit_t8_mult", 2.4);
+        runner.effects.putIfAbsent("runner_crit_t8_mult", 3.4);
         runner.effects.putIfAbsent("runner_crit_t8_dmg", 5.0);
-        runner.effects.putIfAbsent("runner_crit_t9_mult", 3.0);
+        runner.effects.putIfAbsent("runner_crit_t9_mult", 4.0);
         runner.effects.putIfAbsent("runner_crit_t9_dmg", 10.0);
 
         // ================= КАСКАДЕР =================
@@ -193,6 +194,9 @@ public class ModConfig {
         stuntman.effects.putIfAbsent("stuntman_master_max_steps", 5.0);
         stuntman.effects.putIfAbsent("stuntman_master_duration_bonus", 20.0);
         stuntman.effects.putIfAbsent("stuntman_master_cooldown_reduction", 20.0);
+        // НОВЫЕ НАСТРОЙКИ ДЛЯ ВОЗДУШНОЙ БРОНИ
+        stuntman.effects.putIfAbsent("air_armor_aura_interval", 4.0); // Частота частиц ауры (в тиках)
+        stuntman.effects.putIfAbsent("air_armor_sound_interval", 40.0); // Частота звука ветра (в тиках)
 
         // ================== ГЕРОЙ ===================
         ClassSettings hero = cs(c, "hero");
@@ -223,6 +227,8 @@ public class ModConfig {
         porcupine.effects.putIfAbsent("porcupine_hardening_hits_per_step", 500.0);
         porcupine.effects.putIfAbsent("porcupine_hardening_radius_per_step", 0.5);
         porcupine.effects.putIfAbsent("porcupine_hardening_max_steps", 4.0);
+        porcupine.effects.putIfAbsent("porcupine_thorns_range", 4.0); // Радиус ближнего боя
+        porcupine.effects.putIfAbsent("porcupine_thorns_internal_cooldown_ticks", 20.0); // КД в тиках
 
         // ================== ЛУЧНИК ==================
         ClassSettings archer = cs(c, "archer");
@@ -234,11 +240,15 @@ public class ModConfig {
         archer.effects.putIfAbsent("archer_jump_back_absorption_duration_ticks", 1200.0);
         archer.effects.putIfAbsent("archer_hunter_kills_per_step", 100.0);
         archer.effects.putIfAbsent("archer_hunter_max_reduction_ticks", 200.0);
+        archer.effects.putIfAbsent("archer_pure_damage_cooldown", 30.0); // КД чистого урона (в тиках)
+        archer.effects.putIfAbsent("archer_aura_sound_interval", 20.0); // Как часто играет звук ауры (в тиках)
 
         // ============= ОПЫТНЫЙ УБИЙЦА =============
         ClassSettings assassin = cs(c, "assassin");
-        assassin.effects.putIfAbsent("assassin_instakill_chance", 0.005);
+        assassin.effects.putIfAbsent("assassin_instakill_chance", 1.000);
         assassin.effects.putIfAbsent("assassin_bonus_per_kill", 0.3);
+        assassin.effects.putIfAbsent("assassin_max_health_threshold", 100.0); // Макс. ХП моба для срабатывания
+        assassin.effects.putIfAbsent("assassin_pure_damage", 1000.0); // Урон при мгновенном убийстве
 
         // ================== ТИТАН ===================
         ClassSettings titan = cs(c, "titan");
@@ -246,6 +256,8 @@ public class ModConfig {
         titan.effects.putIfAbsent("titan_resistance_amplifier", 0.0);
         titan.effects.putIfAbsent("monolith_resistance_amplifier", 3.0);
         titan.effects.putIfAbsent("monolith_duration_ticks", 100.0);
+        titan.effects.putIfAbsent("titan_aura_particle_interval", 5.0); // Раз в 5 тиков спавним пыль
+        titan.effects.putIfAbsent("titan_aura_sound_interval", 80.0); // Раз в 4 секунды играем звук шагов по камню
 
         // ================= ЛОВКАЧ ===================
         ClassSettings dodger = cs(c, "dodger");
@@ -280,6 +292,7 @@ public class ModConfig {
         // =============== РЕИНКАРНАТОР ===============
         ClassSettings reincarnator = cs(c, "reincarnator");
         reincarnator.effects.putIfAbsent("reincarnator_totem_save_chance", 0.70);
+        reincarnator.effects.putIfAbsent("reincarnator_max_consecutive_saves", 10.0); // Лимит сохранений подряд
     }
 
     private void rebuildFlatMaps() {

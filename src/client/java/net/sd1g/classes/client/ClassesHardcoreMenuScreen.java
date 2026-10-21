@@ -18,6 +18,7 @@ import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.network.RequestClassChangePayload;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
     private List<ClassDefinition> allClasses = new ArrayList<>();
     private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
-    private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
+    private final List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
     private int leftPanelWidth;
     private int rightPanelWidth;
@@ -39,10 +40,10 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private int mainContentHeight;
 
     private static final int PADDING = 10;
-    private static final int ITEM_HEIGHT = 40;
-    private static final int ITEM_SPACING = 5;
+    private static final int ITEM_HEIGHT = 56;
+    private static final int ITEM_SPACING = 8;
     private static final int COLUMNS = 3;
-    private static final int ICON_SIZE = 28;
+    private static final int ICON_SIZE = 40;
     private int columnWidth;
 
     private static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
@@ -60,7 +61,10 @@ public class ClassesHardcoreMenuScreen extends Screen {
         this.mainContentHeight = this.height - mainContentY - 40;
 
         this.columnWidth = (leftPanelWidth - PADDING * 2) / COLUMNS;
+
+        // СОРТИРОВКА КЛАССОВ ПО АЛФАВИТУ
         this.allClasses = new ArrayList<>(ClassRegistry.getAll().values());
+        this.allClasses.sort(Comparator.comparing(def -> def.displayName.toLowerCase()));
 
         if (selectedClass == null && !allClasses.isEmpty()) {
             selectedClass = allClasses.getFirst();
@@ -73,25 +77,29 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         int buttonWidth = isAdmin ? (rightPanelWidth - PADDING * 2) / 3 : (rightPanelWidth - PADDING) / 2;
 
-        this.addRenderableWidget(Button.builder(
+        // КАСТОМНЫЕ КНОПКИ
+        this.addRenderableWidget(new ModButton(
+                rightPanelX, buttonY, buttonWidth, 24,
                 Component.literal("§eСлучайная смена"),
                 _ -> ClientPlayNetworking.send(new RequestClassChangePayload(0, ""))
-        ).bounds(rightPanelX, buttonY, buttonWidth, 24).build());
+        ));
 
-        this.addRenderableWidget(Button.builder(
+        this.addRenderableWidget(new ModButton(
+                rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24,
                 Component.literal("§bВыбор из 3-х"),
                 _ -> ClientPlayNetworking.send(new RequestClassChangePayload(1, ""))
-        ).bounds(rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24).build());
+        ));
 
         if (isAdmin) {
-            this.addRenderableWidget(Button.builder(
+            this.addRenderableWidget(new ModButton(
+                    rightPanelX + (buttonWidth + PADDING) * 2, buttonY, buttonWidth, 24,
                     Component.literal("§cАдмин: Выбрать"),
                     _ -> {
                         if (selectedClass != null) {
                             ClientPlayNetworking.send(new RequestClassChangePayload(2, selectedClass.id));
                         }
                     }
-            ).bounds(rightPanelX + (buttonWidth + PADDING) * 2, buttonY, buttonWidth, 24).build());
+            ));
         }
     }
 
@@ -100,7 +108,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
         cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
         cachedAbilityLines.clear();
         for (Ability ability : selectedClass.abilities) {
-            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32));
+            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 42));
         }
     }
 
@@ -108,14 +116,14 @@ public class ClassesHardcoreMenuScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor gfx, int mouseX, int mouseY, float partialTick) {
         gfx.fill(0, 0, this.width, this.height, 0xEE0A0A0A);
 
-        renderTopPanel(gfx, mouseX, mouseY);
+        renderTopPanel(gfx);
         renderLeftPanel(gfx, mouseX, mouseY);
-        renderRightPanel(gfx, mouseX, mouseY);
+        renderRightPanel(gfx);
 
         super.extractRenderState(gfx, mouseX, mouseY, partialTick);
     }
 
-    private void renderTopPanel(GuiGraphicsExtractor gfx, int mouseX, int mouseY) {
+    private void renderTopPanel(GuiGraphicsExtractor gfx) {
         drawBeveledPanel(gfx, PADDING, topPanelY, this.width - PADDING * 2, topPanelHeight, 0xCC1A1A1A);
 
         String currentClassId = ClassesHardcoreClient.currentClass;
@@ -160,18 +168,18 @@ public class ClassesHardcoreMenuScreen extends Screen {
                 gfx.fill(x, y, x + 3, y + ITEM_HEIGHT, 0xFFFFAA00);
             }
 
-            drawIcon(gfx, def.icon, x + 5, y + 6, ICON_SIZE);
+            drawIcon(gfx, def.icon, x + 8, y + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
 
             String displayName = def.displayName;
-            int maxTextWidth = columnWidth - ICON_SIZE - 15;
+            int maxTextWidth = columnWidth - ICON_SIZE - 20;
             if (this.font.width(displayName) > maxTextWidth) {
                 displayName = this.font.plainSubstrByWidth(displayName, maxTextWidth - 5) + "...";
             }
-            gfx.text(this.font, displayName, x + ICON_SIZE + 10, y + 16, 0xFFFFFFFF, true);
+            gfx.text(this.font, displayName, x + ICON_SIZE + 20, y + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
         }
     }
 
-    private void renderRightPanel(GuiGraphicsExtractor gfx, int mouseX, int mouseY) {
+    private void renderRightPanel(GuiGraphicsExtractor gfx) {
         drawBeveledPanel(gfx, rightPanelX, mainContentY, rightPanelWidth, mainContentHeight, 0xCC151515);
 
         if (selectedClass == null) return;
@@ -179,31 +187,31 @@ public class ClassesHardcoreMenuScreen extends Screen {
         int contentX = rightPanelX + PADDING + 5;
         int contentY = mainContentY + PADDING + 5;
 
-        drawIcon(gfx, selectedClass.icon, contentX, contentY, ICON_SIZE);
-        gfx.text(this.font, "§l" + selectedClass.displayName, contentX + ICON_SIZE + 10, contentY + 10, 0xFFFFAA00, true);
+        drawIcon(gfx, selectedClass.icon, contentX, contentY, 48);
+        gfx.text(this.font, "§l" + selectedClass.displayName, contentX + 48 + 15, contentY + 16, 0xFFFFAA00, true);
 
-        int textY = contentY + ICON_SIZE + 15;
+        int textY = contentY + 48 + 15;
 
         for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
-            textY += 10;
+            textY += 12;
         }
 
         textY += 10;
         gfx.text(this.font, "§lСпособности:", contentX, textY, 0xFFFFAA00, true);
-        textY += 15;
+        textY += 18;
 
         for (int i = 0; i < selectedClass.abilities.size(); i++) {
             Ability ability = selectedClass.abilities.get(i);
-            drawIcon(gfx, ability.getIcon(), contentX, textY, 16);
-            gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 22, textY + 4, 0xFFFFFFFF, true);
+            drawIcon(gfx, ability.getIcon(), contentX, textY, 24);
+            gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 32, textY + 8, 0xFFFFFFFF, true);
 
-            int abiY = textY + 16;
+            int abiY = textY + 26;
             for (FormattedCharSequence line : cachedAbilityLines.get(i)) {
-                gfx.text(this.font, line, contentX + 22, abiY, 0xFF888888, true);
-                abiY += 10;
+                gfx.text(this.font, line, contentX + 32, abiY, 0xFF888888, true);
+                abiY += 11;
             }
-            textY = abiY + 8;
+            textY = abiY + 10;
         }
     }
 
@@ -286,5 +294,36 @@ public class ClassesHardcoreMenuScreen extends Screen {
     @Override
     public void onClose() {
         Minecraft.getInstance().gui.setScreen(parent);
+    }
+
+    // ВНУТРЕННИЙ КЛАСС ДЛЯ КАСТОМНЫХ КНОПОК
+    private class ModButton extends Button {
+        public ModButton(int x, int y, int width, int height, Component message, OnPress onPress) {
+            super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+        }
+
+        // ИСПРАВЛЕНИЕ: renderWidget -> extractContents
+        @Override
+        protected void extractContents(GuiGraphicsExtractor gfx, int mouseX, int mouseY, float partialTick) {
+            boolean hovered = this.isHoveredOrFocused();
+
+            int bgColor = hovered ? 0xEE2A2A2A : 0xCC1A1A1A;
+            int borderColor = hovered ? 0xFFFFAA00 : 0xFF444444;
+
+            gfx.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), bgColor);
+            gfx.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + 1, 0xFF000000);
+            gfx.fill(this.getX(), this.getY() + this.getHeight() - 1, this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF000000);
+            gfx.fill(this.getX(), this.getY(), this.getX() + 1, this.getY() + this.getHeight(), 0xFF000000);
+            gfx.fill(this.getX() + this.getWidth() - 1, this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF000000);
+
+            gfx.fill(this.getX() + 1, this.getY() + 1, this.getX() + this.getWidth() - 1, this.getY() + 2, borderColor);
+            gfx.fill(this.getX() + 1, this.getY() + this.getHeight() - 2, this.getX() + this.getWidth() - 1, this.getY() + this.getHeight() - 1, borderColor);
+            gfx.fill(this.getX() + 1, this.getY() + 1, this.getX() + 2, this.getY() + this.getHeight() - 1, borderColor);
+            gfx.fill(this.getX() + this.getWidth() - 2, this.getY() + 1, this.getX() + this.getWidth() - 1, this.getY() + this.getHeight() - 1, borderColor);
+
+            int textColor = this.active ? (hovered ? 0xFFFFAA00 : 0xFFFFFFFF) : 0xFF888888;
+            int tw = font.width(this.getMessage());
+            gfx.text(font, this.getMessage(), this.getX() + (this.getWidth() - tw) / 2, this.getY() + (this.getHeight() - 8) / 2, textColor, true);
+        }
     }
 }

@@ -2,6 +2,7 @@ package net.sd1g.classes.ability.impl;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -9,6 +10,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
@@ -19,6 +21,10 @@ public class HealAbility implements Ability {
     @Override public String getId() { return "heal"; }
     @Override public String getDisplayName() { return "Исцеление"; }
     @Override public boolean isPassive() { return false; }
+
+    // ДОБАВЛЕНА ИКОНКА
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/heal"); }
 
     @Override
     public int getBaseCooldown() {
@@ -78,7 +84,15 @@ public class HealAbility implements Ability {
         player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenTicks, regenAmp));
 
         ServerLevel level = player.level();
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.5f);
+        // Эффекты: Сердечки, Золотые искры (END_ROD), Зеленые частицы (HAPPY_VILLAGER)
+        level.sendParticles(ParticleTypes.HEART, player.getX(), player.getY() + 1.2, player.getZ(), 6, 0.4, 0.4, 0.4, 0.0);
+        level.sendParticles(ParticleTypes.END_ROD, player.getX(), player.getY() + 1.0, player.getZ(), 15, 0.5, 0.5, 0.5, 0.05);
+        level.sendParticles(ParticleTypes.HAPPY_VILLAGER, player.getX(), player.getY() + 0.5, player.getZ(), 20, 0.6, 0.6, 0.6, 0.02);
+
+        // Звук: Приятный перезвон и уровень
+        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.0f, 1.2f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.8f, 1.5f);
+
         player.sendOverlayMessage(Component.literal("§aИсцеление. §f+" + amount + " HP."));
         return true;
     }

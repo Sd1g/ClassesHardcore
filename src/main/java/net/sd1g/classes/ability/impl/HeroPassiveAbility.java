@@ -6,8 +6,6 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -26,7 +24,6 @@ public class HeroPassiveAbility implements Ability {
     @Override public String getId() { return "hero_aura"; }
     @Override public String getDisplayName() { return "Слава героя"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
 
     @Override
     public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/hero_aura"); }
@@ -85,10 +82,21 @@ public class HeroPassiveAbility implements Ability {
             player.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, 100, newAmp, true, false));
         }
 
-        if (player.tickCount % 12 == 0) {
+        // Мягкая, но заметная аура героя
+        if (player.tickCount % 6 == 0) {
             ServerLevel level = player.level();
-            level.sendParticles(new DustParticleOptions(0xFFD91A, 1.0f),
-                    player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.5, 0.5, 0.05);
+            double x = player.getX();
+            double y = player.getY() + 1.0;
+            double z = player.getZ();
+
+            // Кружащиеся зеленые искры и золотая пыль
+            double angle = (player.tickCount * 0.15) % (Math.PI * 2);
+            double radius = 0.8;
+            double px = x + Math.cos(angle) * radius;
+            double pz = z + Math.sin(angle) * radius;
+
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, px, y + (Math.sin(player.tickCount * 0.1) * 0.3), pz, 1, 0.0, 0.0, 0.0, 0.0);
+            level.sendParticles(new DustParticleOptions(0xFFD700, 1.0f), x, y, z, 1, 0.4, 0.4, 0.4, 0.02);
         }
     }
 

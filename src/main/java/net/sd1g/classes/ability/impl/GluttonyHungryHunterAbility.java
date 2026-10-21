@@ -1,12 +1,20 @@
 package net.sd1g.classes.ability.impl;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
+import net.sd1g.classes.network.HudMessagePayload;
 import net.sd1g.classes.util.PureDamage;
 
 import java.util.List;
@@ -15,7 +23,9 @@ public class GluttonyHungryHunterAbility implements Ability {
     @Override public String getId() { return "hungry_hunter"; }
     @Override public String getDisplayName() { return "Голодный хищник"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/hungry_hunter"); }
 
     @Override
     public String getDescription() {
@@ -40,6 +50,14 @@ public class GluttonyHungryHunterAbility implements Ability {
             double dmg = ModConfig.getInstance().getEffect("gluttony_hungry_hunter_damage", 2.0);
             PureDamage.apply(attacker, target, (float) dmg);
             data.setCooldown("hungry_hunter_cd", now, 30);
+
+            ServerPlayNetworking.send(attacker, new HudMessagePayload("§6Голодный хищник!", 0xFFFFAA00, 40));
+
+            ServerLevel level = attacker.level();
+            // Эффект на враге (кровавые искры и звук укуса)
+            level.sendParticles(ParticleTypes.DAMAGE_INDICATOR, target.getX(), target.getY() + 1, target.getZ(), 5, 0.2, 0.2, 0.2, 0.1);
+            level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1, target.getZ(), 10, 0.3, 0.3, 0.3, 0.1);
+            level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EAT, SoundSource.PLAYERS, 0.6f, 1.5f);
         }
     }
 }

@@ -1,5 +1,6 @@
 package net.sd1g.classes.mixin;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,6 +11,7 @@ import net.sd1g.classes.ability.impl.DodgerAbility;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
 import net.sd1g.classes.network.CooldownSyncPayload;
+import net.sd1g.classes.network.HudMessagePayload;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -42,9 +44,10 @@ public class DodgerDodgeMixin {
         data.dodgerDodgeCount++;
         PlayerClassData.markDirty(sp);
 
-        net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
-                sp, new CooldownSyncPayload("dodger_dodges", data.dodgerDodgeCount)
-        );
+        ServerPlayNetworking.send(sp, new CooldownSyncPayload("dodger_dodges", data.dodgerDodgeCount));
+
+        // HUD Уведомление
+        ServerPlayNetworking.send(sp, new HudMessagePayload("§bУклонение!", 0xFF55FFFF, 40));
 
         if (amount >= 2.0f) sp.sendOverlayMessage(Component.literal("§bУклонение!§f Урон от атаки избежан."));
 

@@ -1,7 +1,12 @@
 package net.sd1g.classes.ability.impl;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
@@ -10,14 +15,16 @@ import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.data.PlayerClassData;
+import net.sd1g.classes.network.HudMessagePayload;
 
 import java.util.List;
 
 public class LuckyDiggerMiningAbility implements Ability {
+    private static final java.util.Map<java.util.UUID, Integer> LAST_LEVEL = new java.util.HashMap<>();
+
     @Override public String getId() { return "mining_mastery"; }
     @Override public String getDisplayName() { return "Мастерство шахтёра"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
 
     @Override
     public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/mining_mastery"); }
@@ -54,6 +61,27 @@ public class LuckyDiggerMiningAbility implements Ability {
     @Override
     public void onPassiveTick(ServerPlayer player) {
         PlayerClassData data = PlayerClassData.get(player);
+        int last = LAST_LEVEL.getOrDefault(player.getUUID(), 0);
+
+        // Эпичный эффект при повышении уровня
+        if (data.luckyDiggerLevel > last) {
+            ServerLevel level = player.level();
+            ServerPlayNetworking.send(player, new HudMessagePayload("§aШахтёр: Уровень " + data.luckyDiggerLevel + "!", 0xFF55FF55, 80));
+
+            // Триумфальные звуки
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 1.0f, 1.0f);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.5f);
+
+            // Эпичные эффекты (золотые искры, фейерверк, чары)
+            double x = player.getX();
+            double y = player.getY() + 1.0;
+            double z = player.getZ();
+            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 80, 0.5, 1.0, 0.5, 0.2);
+            level.sendParticles(ParticleTypes.FIREWORK, x, y, z, 40, 1.0, 1.0, 1.0, 0.2);
+            level.sendParticles(ParticleTypes.ENCHANT, x, y, z, 60, 1.0, 1.5, 1.0, 0.5);
+        }
+        LAST_LEVEL.put(player.getUUID(), data.luckyDiggerLevel);
+
         if (data.luckyDiggerLevel <= 0) return;
 
         if ("efficiency".equals(data.luckyDiggerMode)) {

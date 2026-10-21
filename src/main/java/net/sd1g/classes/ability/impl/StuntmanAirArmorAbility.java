@@ -1,7 +1,12 @@
 package net.sd1g.classes.ability.impl;
 
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -11,6 +16,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
+import net.sd1g.classes.config.ModConfig;
 
 import java.util.List;
 
@@ -21,7 +27,6 @@ public class StuntmanAirArmorAbility implements Ability {
     @Override public String getId() { return "air_armor"; }
     @Override public String getDisplayName() { return "Воздушная броня"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
 
     @Override
     public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/air_armor"); }
@@ -52,26 +57,54 @@ public class StuntmanAirArmorAbility implements Ability {
             return;
         }
 
+        // ================== ЭФФЕКТЫ АУРЫ И ВЕТРА ==================
+        ModConfig cfg = ModConfig.getInstance();
+        int auraInterval = Math.max(1, cfg.getIntEffect("air_armor_aura_interval", 4));
+        int soundInterval = Math.max(1, cfg.getIntEffect("air_armor_sound_interval", 40));
+
+        ServerLevel level = player.level();
+        if (player.tickCount % auraInterval == 0) {
+            // Аура в цвет элитр (светло-фиолетовый) и белые искры
+            double x = player.getX();
+            double y = player.getY() + 1.0;
+            double z = player.getZ();
+
+            // Кружащиеся частицы вокруг игрока
+            double angle = (player.tickCount * 0.2) % (Math.PI * 2);
+            double radius = 1.0;
+            double px = x + Math.cos(angle) * radius;
+            double pz = z + Math.sin(angle) * radius;
+
+            level.sendParticles(new DustParticleOptions(0xC080FF, 1.2f), px, y + 0.5, pz, 2, 0.0, 0.0, 0.0, 0.0);
+            level.sendParticles(new DustParticleOptions(0x8A2BE2, 1.0f), x, y - 0.5, z, 2, 0.3, 0.3, 0.3, 0.05);
+            level.sendParticles(ParticleTypes.END_ROD, x, y, z, 1, 0.3, 0.3, 0.3, 0.02);
+        }
+
+        if (player.tickCount % soundInterval == 0) {
+            // Звук сильного ветра
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 0.4f, 1.0f);
+        }
+
+        // ================== ЛОГИКА БРОНИ ==================
         ItemStack helmet = player.getItemBySlot(EquipmentSlot.HEAD);
         ItemStack legs = player.getItemBySlot(EquipmentSlot.LEGS);
         ItemStack boots = player.getItemBySlot(EquipmentSlot.FEET);
 
-        // Определяем материал по шлему (или сапогам, если шлема нет)
         double armorVal = 0;
         double toughVal = 0;
 
         if (helmet.is(Items.NETHERITE_HELMET) || legs.is(Items.NETHERITE_LEGGINGS) || boots.is(Items.NETHERITE_BOOTS)) {
-            armorVal = 8; toughVal = 3; // Незерит
+            armorVal = 8; toughVal = 3;
         } else if (helmet.is(Items.DIAMOND_HELMET) || legs.is(Items.DIAMOND_LEGGINGS) || boots.is(Items.DIAMOND_BOOTS)) {
-            armorVal = 8; toughVal = 2; // Алмаз
+            armorVal = 8; toughVal = 2;
         } else if (helmet.is(Items.IRON_HELMET) || legs.is(Items.IRON_LEGGINGS) || boots.is(Items.IRON_BOOTS)) {
-            armorVal = 6; toughVal = 0; // Железо
+            armorVal = 6; toughVal = 0;
         } else if (helmet.is(Items.GOLDEN_HELMET) || legs.is(Items.GOLDEN_LEGGINGS) || boots.is(Items.GOLDEN_BOOTS)) {
-            armorVal = 5; toughVal = 0; // Золото
+            armorVal = 5; toughVal = 0;
         } else if (helmet.is(Items.CHAINMAIL_HELMET) || legs.is(Items.CHAINMAIL_LEGGINGS) || boots.is(Items.CHAINMAIL_BOOTS)) {
-            armorVal = 5; toughVal = 0; // Кольчуга
+            armorVal = 5; toughVal = 0;
         } else if (helmet.is(Items.LEATHER_HELMET) || legs.is(Items.LEATHER_LEGGINGS) || boots.is(Items.LEATHER_BOOTS)) {
-            armorVal = 3; toughVal = 0; // Кожа
+            armorVal = 3; toughVal = 0;
         }
 
         if (armorVal > 0) {

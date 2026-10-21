@@ -17,6 +17,7 @@ import net.sd1g.classes.ability.ClassRegistry;
 import net.sd1g.classes.network.RequestClassChangePayload;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,13 +29,13 @@ public class Pick3Screen extends Screen {
     private boolean viewingCurrentClass = false;
 
     private boolean showCancelWarning = false;
-    private Button selectButton;
-    private Button cancelButton;
-    private Button warningYesButton;
-    private Button warningNoButton;
+    private ModButton selectButton;
+    private ModButton cancelButton;
+    private ModButton warningYesButton;
+    private ModButton warningNoButton;
 
     private List<FormattedCharSequence> cachedDescLines = new ArrayList<>();
-    private List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
+    private final List<List<FormattedCharSequence>> cachedAbilityLines = new ArrayList<>();
 
     private int leftPanelWidth;
     private int rightPanelWidth;
@@ -45,9 +46,9 @@ public class Pick3Screen extends Screen {
     private int mainContentHeight;
 
     private static final int PADDING = 10;
-    private static final int ITEM_HEIGHT = 50;
-    private static final int ITEM_SPACING = 8;
-    private static final int ICON_SIZE = 32;
+    private static final int ITEM_HEIGHT = 60;
+    private static final int ITEM_SPACING = 10;
+    private static final int ICON_SIZE = 48;
     private int itemWidth;
 
     private static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
@@ -55,7 +56,13 @@ public class Pick3Screen extends Screen {
     public Pick3Screen(Screen parent, List<String> options) {
         super(Component.literal("Выбор из 3"));
         this.parent = parent;
-        this.options = options;
+
+        // СОРТИРОВКА ВАРИАНТОВ ПО АЛФАВИТУ
+        this.options = new ArrayList<>(options);
+        this.options.sort(Comparator.comparing(id -> {
+            ClassDefinition def = ClassRegistry.get(id);
+            return def != null ? def.displayName.toLowerCase() : id;
+        }));
     }
 
     @Override
@@ -76,7 +83,9 @@ public class Pick3Screen extends Screen {
         int buttonY = this.height - 30;
         int buttonWidth = (rightPanelWidth - PADDING) / 2;
 
-        this.selectButton = Button.builder(
+        // КАСТОМНЫЕ КНОПКИ
+        this.selectButton = new ModButton(
+                rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24,
                 Component.literal("§aПодтвердить выбор"),
                 _ -> {
                     if (selectedClass != null && !viewingCurrentClass) {
@@ -84,34 +93,37 @@ public class Pick3Screen extends Screen {
                         this.onClose();
                     }
                 }
-        ).bounds(rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24).build();
+        );
         this.addRenderableWidget(this.selectButton);
 
-        this.cancelButton = Button.builder(
+        this.cancelButton = new ModButton(
+                rightPanelX, buttonY, buttonWidth, 24,
                 Component.literal("§cВернуться назад"),
                 _ -> {
                     this.showCancelWarning = true;
                     updateWarningButtons();
                 }
-        ).bounds(rightPanelX, buttonY, buttonWidth, 24).build();
+        );
         this.addRenderableWidget(this.cancelButton);
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;
         int warnBtnWidth = 120;
 
-        this.warningYesButton = Button.builder(
+        this.warningYesButton = new ModButton(
+                centerX - warnBtnWidth - 10, centerY + 30, warnBtnWidth, 20,
                 Component.literal("§cДа, выйти"),
                 _ -> this.onClose()
-        ).bounds(centerX - warnBtnWidth - 10, centerY + 30, warnBtnWidth, 20).build();
+        );
 
-        this.warningNoButton = Button.builder(
+        this.warningNoButton = new ModButton(
+                centerX + 10, centerY + 30, warnBtnWidth, 20,
                 Component.literal("§aНет, остаться"),
                 _ -> {
                     this.showCancelWarning = false;
                     updateWarningButtons();
                 }
-        ).bounds(centerX + 10, centerY + 30, warnBtnWidth, 20).build();
+        );
 
         this.addRenderableWidget(this.warningYesButton);
         this.addRenderableWidget(this.warningNoButton);
@@ -124,7 +136,7 @@ public class Pick3Screen extends Screen {
         cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
         cachedAbilityLines.clear();
         for (Ability ability : selectedClass.abilities) {
-            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 32));
+            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 42));
         }
     }
 
@@ -212,8 +224,8 @@ public class Pick3Screen extends Screen {
                 gfx.fill(startX, y, startX + 3, y + ITEM_HEIGHT, 0xFFFFAA00);
             }
 
-            drawIcon(gfx, def.icon, startX + 10, y + 9, ICON_SIZE);
-            gfx.text(this.font, "§l" + def.displayName, startX + ICON_SIZE + 20, y + 20, 0xFFFFFFFF, true);
+            drawIcon(gfx, def.icon, startX + 10, y + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
+            gfx.text(this.font, "§l" + def.displayName, startX + ICON_SIZE + 20, y + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
         }
 
         int currentY = startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20;
@@ -231,8 +243,8 @@ public class Pick3Screen extends Screen {
                 gfx.fill(startX, currentY, startX + 3, currentY + ITEM_HEIGHT, 0xFF44FF44);
             }
 
-            drawIcon(gfx, currentDef.icon, startX + 10, currentY + 9, ICON_SIZE);
-            gfx.text(this.font, "§7Ваш класс: §f" + currentDef.displayName, startX + ICON_SIZE + 20, currentY + 20, 0xFFFFFFFF, true);
+            drawIcon(gfx, currentDef.icon, startX + 10, currentY + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
+            gfx.text(this.font, "§7Ваш класс: §f" + currentDef.displayName, startX + ICON_SIZE + 20, currentY + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
         }
     }
 
@@ -244,32 +256,32 @@ public class Pick3Screen extends Screen {
         int contentX = rightPanelX + PADDING + 5;
         int contentY = mainContentY + PADDING + 5;
 
-        drawIcon(gfx, selectedClass.icon, contentX, contentY, ICON_SIZE);
+        drawIcon(gfx, selectedClass.icon, contentX, contentY, 48);
         String title = viewingCurrentClass ? "§7[Текущий] §l" + selectedClass.displayName : "§l" + selectedClass.displayName;
-        gfx.text(this.font, title, contentX + ICON_SIZE + 10, contentY + 12, 0xFFFFAA00, true);
+        gfx.text(this.font, title, contentX + 48 + 15, contentY + 16, 0xFFFFAA00, true);
 
-        int textY = contentY + ICON_SIZE + 15;
+        int textY = contentY + 48 + 15;
 
         for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
-            textY += 10;
+            textY += 12;
         }
 
         textY += 10;
         gfx.text(this.font, "§lСпособности:", contentX, textY, 0xFFFFAA00, true);
-        textY += 15;
+        textY += 18;
 
         for (int i = 0; i < selectedClass.abilities.size(); i++) {
             Ability ability = selectedClass.abilities.get(i);
-            drawIcon(gfx, ability.getIcon(), contentX, textY, 16);
-            gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 22, textY + 4, 0xFFFFFFFF, true);
+            drawIcon(gfx, ability.getIcon(), contentX, textY, 24);
+            gfx.text(this.font, "§e" + ability.getDisplayName(), contentX + 32, textY + 8, 0xFFFFFFFF, true);
 
-            int abiY = textY + 16;
+            int abiY = textY + 26;
             for (FormattedCharSequence line : cachedAbilityLines.get(i)) {
-                gfx.text(this.font, line, contentX + 22, abiY, 0xFF888888, true);
-                abiY += 10;
+                gfx.text(this.font, line, contentX + 32, abiY, 0xFF888888, true);
+                abiY += 11;
             }
-            textY = abiY + 8;
+            textY = abiY + 10;
         }
     }
 
@@ -366,5 +378,35 @@ public class Pick3Screen extends Screen {
     @Override
     public void onClose() {
         Minecraft.getInstance().gui.setScreen(parent);
+    }
+
+    // ВНУТРЕННИЙ КЛАСС ДЛЯ КАСТОМНЫХ КНОПОК
+    private class ModButton extends Button {
+        public ModButton(int x, int y, int width, int height, Component message, OnPress onPress) {
+            super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+        }
+
+        @Override
+        protected void extractContents(GuiGraphicsExtractor gfx, int mouseX, int mouseY, float partialTick) {
+            boolean hovered = this.isHoveredOrFocused();
+
+            int bgColor = hovered ? 0xEE2A2A2A : 0xCC1A1A1A;
+            int borderColor = hovered ? 0xFFFFAA00 : 0xFF444444;
+
+            gfx.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), bgColor);
+            gfx.fill(this.getX(), this.getY(), this.getX() + this.getWidth(), this.getY() + 1, 0xFF000000);
+            gfx.fill(this.getX(), this.getY() + this.getHeight() - 1, this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF000000);
+            gfx.fill(this.getX(), this.getY(), this.getX() + 1, this.getY() + this.getHeight(), 0xFF000000);
+            gfx.fill(this.getX() + this.getWidth() - 1, this.getY(), this.getX() + this.getWidth(), this.getY() + this.getHeight(), 0xFF000000);
+
+            gfx.fill(this.getX() + 1, this.getY() + 1, this.getX() + this.getWidth() - 1, this.getY() + 2, borderColor);
+            gfx.fill(this.getX() + 1, this.getY() + this.getHeight() - 2, this.getX() + this.getWidth() - 1, this.getY() + this.getHeight() - 1, borderColor);
+            gfx.fill(this.getX() + 1, this.getY() + 1, this.getX() + 2, this.getY() + this.getHeight() - 1, borderColor);
+            gfx.fill(this.getX() + this.getWidth() - 2, this.getY() + 1, this.getX() + this.getWidth() - 1, this.getY() + this.getHeight() - 1, borderColor);
+
+            int textColor = this.active ? (hovered ? 0xFFFFAA00 : 0xFFFFFFFF) : 0xFF888888;
+            int tw = font.width(this.getMessage());
+            gfx.text(font, this.getMessage(), this.getX() + (this.getWidth() - tw) / 2, this.getY() + (this.getHeight() - 8) / 2, textColor, true);
+        }
     }
 }

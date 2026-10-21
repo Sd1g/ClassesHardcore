@@ -1,11 +1,13 @@
 package net.sd1g.classes.ability.impl;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
+import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
 import net.sd1g.classes.config.ModConfig;
 import net.sd1g.classes.data.PlayerClassData;
@@ -17,7 +19,9 @@ public class InvisibleElusivenessAbility implements Ability {
     @Override public String getId() { return "invisible_elusiveness"; }
     @Override public String getDisplayName() { return "Ускользание"; }
     @Override public boolean isPassive() { return true; }
-    @Override public int getBaseCooldown() { return 0; }
+
+    @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/invisible_elusiveness"); }
 
     @Override
     public String getDescription() {
@@ -49,6 +53,9 @@ public class InvisibleElusivenessAbility implements Ability {
             player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, duration, 0, false, false, true));
             ServerPlayNetworking.send(player, new InvisibilitySyncPayload(duration));
             data.setCooldown("invis_passive_cd", now, cdTicks);
+
+            // ИСПОЛЬЗУЕМ ТОТ ЖЕ МЕТОД, ЧТО И У АКТИВКИ (эффект исчезновения)
+            InvisibilityAbility.spawnInvisibilityEffect(player.level(), player, false);
         }
     }
 }

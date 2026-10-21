@@ -24,7 +24,8 @@
     "FarmerDamageMixin",
     "BruteAnvilMixin",
     "ItemCombinerMenuAccessor",
-    "DodgerDodgeMixin"
+    "DodgerDodgeMixin",
+    "HeroRaidDamageMixin"
   ],
   "client": [],
   "injectors": {

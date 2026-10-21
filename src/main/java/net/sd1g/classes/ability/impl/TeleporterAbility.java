@@ -2,6 +2,7 @@ package net.sd1g.classes.ability.impl;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -29,21 +30,21 @@ public class TeleporterAbility implements Ability {
     @Override public boolean isPassive() { return false; }
 
     @Override
+    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/teleport"); }
+
+    @Override
     public int getBaseCooldown() {
         return ModConfig.getInstance().getCooldown("teleport", 100);
     }
 
-    @Override
-    public Identifier getIcon() { return ClassesHardcore.id("gui/sprites/ability/teleport"); }
-
     public static double getMaxDistance(ServerPlayer player) {
         ModConfig cfg = ModConfig.getInstance();
         PlayerClassData data = PlayerClassData.get(player);
-        int tpPerBonus = cfg.getIntEffect("teleporter_tp_per_bonus", 200);
+        int tpPerBonus = Math.max(1, cfg.getIntEffect("teleporter_tp_per_bonus", 200));
         double maxBonus = cfg.getEffect("teleporter_max_bonus", 10.0);
         double baseMax = cfg.getEffect("teleport_max_distance", 30.0);
 
-        double bonus = Math.min((data.teleporterCount / (double)tpPerBonus) * 1.0, maxBonus);
+        double bonus = Math.min((data.teleporterCount / (double)tpPerBonus), maxBonus);
         return baseMax + bonus;
     }
 
@@ -105,15 +106,13 @@ public class TeleporterAbility implements Ability {
         Vec3 target = new Vec3(rawTarget.x, standBp.getY(), rawTarget.z);
         double px = player.getX(), py = player.getY() + 1.0, pz = player.getZ();
 
-        level.sendParticles(ParticleTypes.REVERSE_PORTAL, px, py, pz, 60, 0.6, 1.0, 0.6, 0.15);
-        level.playSound(null, px, py, pz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.0f);
+        spawnTeleportBurst(level, px, py, pz);
 
         player.teleportTo(target.x, target.y, target.z);
         player.resetFallDistance();
 
         double tx = target.x, ty = target.y + 1.0, tz = target.z;
-        level.sendParticles(ParticleTypes.REVERSE_PORTAL, tx, ty, tz, 60, 0.6, 1.0, 0.6, 0.15);
-        level.playSound(null, tx, ty, tz, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.5f, 1.3f);
+        spawnTeleportBurst(level, tx, ty, tz);
 
         PlayerClassData data = PlayerClassData.get(player);
         data.teleporterCount++;
@@ -121,6 +120,19 @@ public class TeleporterAbility implements Ability {
 
         ServerPlayNetworking.send(player, new CooldownSyncPayload("teleporter_count", data.teleporterCount));
         return true;
+    }
+
+    private void spawnTeleportBurst(ServerLevel level, double x, double y, double z) {
+        // Измененный эффект: Космический голубой/бирюзовый вихрь
+        level.sendParticles(new DustParticleOptions(0x00FFFF, 1.5f), x, y, z, 50, 0.4, 0.8, 0.4, 0.1); // Ярко-голубой
+        level.sendParticles(new DustParticleOptions(0x1E90FF, 2.0f), x, y, z, 30, 0.3, 0.5, 0.3, 0.05); // Морская волна
+        level.sendParticles(new DustParticleOptions(0x0000FF, 1.0f), x, y, z, 20, 0.5, 0.5, 0.5, 0.02); // Глубокий синий
+        level.sendParticles(ParticleTypes.END_ROD, x, y, z, 10, 0.2, 0.2, 0.2, 0.05); // Белые искры
+        level.sendParticles(ParticleTypes.CRIT, x, y, z, 15, 0.4, 0.4, 0.4, 0.1); // Критические искры
+
+        // Звук оставляем как ты просил
+        level.playSound(null, x, y, z, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0f, 1.0f);
+        level.playSound(null, x, y, z, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS, 0.8f, 1.2f);
     }
 
     public static BlockPos findTargetPosition(Level level, Vec3 rawTarget) {

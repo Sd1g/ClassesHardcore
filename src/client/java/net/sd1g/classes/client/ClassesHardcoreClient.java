@@ -27,11 +27,7 @@ import net.sd1g.classes.data.AbilityClientState;
 import net.sd1g.classes.network.*;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class ClassesHardcoreClient implements ClientModInitializer {
     public static KeyMapping activateAbilityKey;
@@ -106,8 +102,27 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         );
 
         ClientPlayNetworking.registerGlobalReceiver(SyncConfigPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> ModConfig.loadFromJson(payload.json()));
+        });
+
+        // --- НОВЫЕ ПРИЕМНИКИ ---
+        ClientPlayNetworking.registerGlobalReceiver(ActiveTimerPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> AbilityClientState.activeTimers.put(payload.abilityId(), payload.durationTicks()));
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(ArmedStatePayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
-                ModConfig.loadFromJson(payload.json());
+                if (payload.armed()) AbilityClientState.armedAbilities.add(payload.abilityId());
+                else AbilityClientState.armedAbilities.remove(payload.abilityId());
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(HudMessagePayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                AbilityClientState.hudMessages.add(new AbilityClientState.HudMessage(payload.text(), payload.color(), payload.durationTicks()));
+                if (AbilityClientState.hudMessages.size() > 5) {
+                    AbilityClientState.hudMessages.removeFirst();
+                }
             });
         });
 
@@ -119,7 +134,6 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 cachedSecondActiveAbility = findActiveAbility(cachedClassDef, 1);
 
                 int crystalCd = cooldownTicks.getOrDefault("end_crystal", 0);
-
                 cooldownTicks.clear();
                 cooldownTotal.clear();
 
@@ -141,6 +155,10 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 AbilityClientState.farmerPlayerKills = 0;
                 AbilityClientState.heroTrades = 0;
 
+                AbilityClientState.activeTimers.clear();
+                AbilityClientState.armedAbilities.clear();
+                AbilityClientState.hudMessages.clear();
+
                 preloadIcons();
             });
         });
@@ -150,19 +168,13 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 String id = payload.abilityId();
                 int remaining = payload.remainingTicks();
 
-                if (id.equals("teleporter_count")) {
-                    AbilityClientState.teleporterCount = remaining;
-                } else if (id.equals("stuntman_blocks")) {
-                    AbilityClientState.stuntmanClimbedBlocks = remaining;
-                } else if (id.equals("porcupine_hits")) {
-                    AbilityClientState.porcupineHitsTaken = remaining;
-                } else if (id.equals("archer_kills")) {
-                    AbilityClientState.archerBowKills = remaining;
-                } else if (id.equals("warrior_kills")) {
-                    AbilityClientState.warriorSwordKills = remaining;
-                } else if (id.equals("dodger_dodges")) {
-                    AbilityClientState.dodgerDodges = remaining;
-                } else {
+                if (id.equals("teleporter_count")) AbilityClientState.teleporterCount = remaining;
+                else if (id.equals("stuntman_blocks")) AbilityClientState.stuntmanClimbedBlocks = remaining;
+                else if (id.equals("porcupine_hits")) AbilityClientState.porcupineHitsTaken = remaining;
+                else if (id.equals("archer_kills")) AbilityClientState.archerBowKills = remaining;
+                else if (id.equals("warrior_kills")) AbilityClientState.warriorSwordKills = remaining;
+                else if (id.equals("dodger_dodges")) AbilityClientState.dodgerDodges = remaining;
+                else {
                     cooldownTicks.put(id, remaining);
                     cooldownTotal.put(id, remaining);
                 }
@@ -223,16 +235,24 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             if (client.player == null) return;
             if (client.isPaused()) return;
 
-            while (openMenuKey.consumeClick()) {
-                if (client.gui.screen() == null) {
-                    client.gui.setScreen(new ClassesHardcoreMenuScreen(null));
+            // Тикаем таймеры HUD
+            if (!AbilityClientState.activeTimers.isEmpty()) {
+                Iterator<Map.Entry<String, Integer>> it = AbilityClientState.activeTimers.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<String, Integer> e = it.next();
+                    if (e.getValue() <= 1) it.remove();
+                    else e.setValue(e.getValue() - 1);
                 }
             }
+            if (!AbilityClientState.hudMessages.isEmpty()) {
+                AbilityClientState.hudMessages.removeIf(m -> --m.ticksLeft <= 0);
+            }
 
+            while (openMenuKey.consumeClick()) {
+                if (client.gui.screen() == null) client.gui.setScreen(new ClassesHardcoreMenuScreen(null));
+            }
             while (openConfigKey.consumeClick()) {
-                if (client.gui.screen() == null) {
-                    client.gui.setScreen(new ClassesHardcoreConfigScreen(null));
-                }
+                if (client.gui.screen() == null) client.gui.setScreen(new ClassesHardcoreConfigScreen(null));
             }
 
             if (client.gui.screen() != null && teleportAiming) {
@@ -241,12 +261,8 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             }
 
             if (client.gui.screen() == null) {
-                while (activateAbilityKey.consumeClick()) {
-                    handlePrimaryActivation();
-                }
-                while (activateSecondaryKey.consumeClick()) {
-                    handleSecondaryActivation();
-                }
+                while (activateAbilityKey.consumeClick()) handlePrimaryActivation();
+                while (activateSecondaryKey.consumeClick()) handleSecondaryActivation();
             }
 
             if (!cooldownTicks.isEmpty()) {
@@ -265,9 +281,7 @@ public class ClassesHardcoreClient implements ClientModInitializer {
 
             if (teleportAiming) {
                 previewTickCounter++;
-                if (previewTickCounter % 2 == 0) {
-                    renderTeleportPreview(client);
-                }
+                if (previewTickCounter % 2 == 0) renderTeleportPreview(client);
             }
         });
 
@@ -275,15 +289,45 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 (graphics, tickCounter) -> renderClassHud(graphics));
     }
 
+    private static String getAbilityName(String id) {
+        for (ClassDefinition def : ClassRegistry.getAll().values()) {
+            for (Ability a : def.abilities) {
+                if (a.getId().equals(id)) return a.getDisplayName();
+            }
+        }
+        return id;
+    }
+
+    private void renderHudNotifications(GuiGraphicsExtractor graphics, Font font, int screenWidth, int screenHeight) {
+        int startY = screenHeight - 55;
+        int centerX = screenWidth / 2;
+
+        for (Map.Entry<String, Integer> entry : AbilityClientState.activeTimers.entrySet()) {
+            String name = getAbilityName(entry.getKey());
+            int ticks = entry.getValue();
+            String text = "§b" + name + ": §e" + (ticks / 20 + 1) + "с";
+            graphics.centeredText(font, text, centerX, startY, 0xFFFFFFFF);
+            startY -= 11;
+        }
+
+        for (String id : AbilityClientState.armedAbilities) {
+            String name = getAbilityName(id);
+            String text = "§a" + name + ": §fГотово к удару!";
+            graphics.centeredText(font, text, centerX, startY, 0xFFFFFFFF);
+            startY -= 11;
+        }
+
+        for (AbilityClientState.HudMessage msg : AbilityClientState.hudMessages) {
+            graphics.centeredText(font, msg.text, centerX, startY, msg.color);
+            startY -= 11;
+        }
+    }
+
     private static void preloadIcons() {
         for (ClassDefinition def : ClassRegistry.getAll().values()) {
-            if (def.icon != null) {
-                getTextureSize(def.icon);
-            }
+            if (def.icon != null) getTextureSize(def.icon);
             for (Ability ability : def.abilities) {
-                if (ability.getIcon() != null) {
-                    getTextureSize(ability.getIcon());
-                }
+                if (ability.getIcon() != null) getTextureSize(ability.getIcon());
             }
         }
     }
@@ -325,35 +369,19 @@ public class ClassesHardcoreClient implements ClientModInitializer {
     private static String keyName(KeyMapping mapping, String fallback) {
         try {
             int keyCode = mapping.getDefaultKey().getValue();
-            if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
-                return String.valueOf((char) keyCode);
-            }
-            if (keyCode >= GLFW.GLFW_KEY_0 && keyCode <= GLFW.GLFW_KEY_9) {
-                return String.valueOf((char) keyCode);
-            }
-            if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) {
-                return "F" + (keyCode - GLFW.GLFW_KEY_F1 + 1);
-            }
+            if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) return String.valueOf((char) keyCode);
+            if (keyCode >= GLFW.GLFW_KEY_0 && keyCode <= GLFW.GLFW_KEY_9) return String.valueOf((char) keyCode);
+            if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) return "F" + (keyCode - GLFW.GLFW_KEY_F1 + 1);
             return mapping.getTranslatedKeyMessage().getString();
-        } catch (Exception e) {
-            return fallback;
-        }
+        } catch (Exception e) { return fallback; }
     }
 
-    private String getPrimaryKeyName() {
-        return keyName(activateAbilityKey, "R");
-    }
-
-    private String getSecondaryKeyName() {
-        return keyName(activateSecondaryKey, "V");
-    }
+    private String getPrimaryKeyName() { return keyName(activateAbilityKey, "R"); }
+    private String getSecondaryKeyName() { return keyName(activateSecondaryKey, "V"); }
 
     public static Identifier getTexturePath(Identifier icon) {
         if (icon == null) return null;
-        // Если путь уже содержит textures/ и .png, возвращаем как есть (на всякий случай)
-        if (icon.getPath().startsWith("textures/") && icon.getPath().endsWith(".png")) {
-            return icon;
-        }
+        if (icon.getPath().startsWith("textures/") && icon.getPath().endsWith(".png")) return icon;
         return Identifier.fromNamespaceAndPath(icon.getNamespace(), "textures/" + icon.getPath() + ".png");
     }
 
@@ -366,14 +394,10 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 if (resource.isEmpty()) return new int[]{0, 0};
                 try (var stream = resource.get().open()) {
                     NativeImage img = NativeImage.read(stream);
-                    int w = img.getWidth();
-                    int h = img.getHeight();
-                    img.close();
+                    int w = img.getWidth(); int h = img.getHeight(); img.close();
                     return new int[]{w, h};
                 }
-            } catch (Exception e) {
-                return new int[]{0, 0};
-            }
+            } catch (Exception e) { return new int[]{0, 0}; }
         });
     }
 
@@ -411,6 +435,8 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         int screenWidth = mc.getWindow().getGuiScaledWidth();
         int screenHeight = mc.getWindow().getGuiScaledHeight();
 
+        renderHudNotifications(graphics, font, screenWidth, screenHeight);
+
         int hotbarRight = screenWidth / 2 + 91;
         int startX = hotbarRight + 8;
         int startY = screenHeight - SQUARE_SIZE - KEY_LABEL_HEIGHT - 4;
@@ -423,18 +449,13 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         }
 
         ClassDefinition def = cachedClassDef;
-
         int classX = startX;
         drawSquare(graphics, classX, startY, CLASS_BORDER_COLOR);
 
-        if (def != null) {
-            drawIcon(graphics, def.icon, classX, startY);
-        } else {
+        if (def != null) drawIcon(graphics, def.icon, classX, startY);
+        else {
             String q = "?";
-            graphics.text(font, q,
-                    classX + (SQUARE_SIZE - font.width(q)) / 2,
-                    startY + (SQUARE_SIZE - 8) / 2,
-                    TEXT_COLOR, false);
+            graphics.text(font, q, classX + (SQUARE_SIZE - font.width(q)) / 2, startY + (SQUARE_SIZE - 8) / 2, TEXT_COLOR, false);
         }
 
         abilityPositionsCache.clear();
@@ -442,61 +463,39 @@ public class ClassesHardcoreClient implements ClientModInitializer {
 
         if (def != null) {
             List<Ability> sortedAbilities = new ArrayList<>();
-            for (Ability a : def.abilities) {
-                if (!a.isPassive()) sortedAbilities.add(a);
-            }
-            for (Ability a : def.abilities) {
-                if (a.isPassive()) sortedAbilities.add(a);
-            }
+            for (Ability a : def.abilities) if (!a.isPassive()) sortedAbilities.add(a);
+            for (Ability a : def.abilities) if (a.isPassive()) sortedAbilities.add(a);
 
             int abilityX = classX + SQUARE_SIZE + SQUARE_SPACING;
             int activeCounter = 0;
 
             for (Ability ability : sortedAbilities) {
-                boolean onCooldown = !ability.isPassive()
-                        && cooldownTicks.getOrDefault(ability.getId(), 0) > 0;
+                boolean onCooldown = !ability.isPassive() && cooldownTicks.getOrDefault(ability.getId(), 0) > 0;
                 drawSquare(graphics, abilityX, startY, BORDER_COLOR);
                 drawIcon(graphics, ability.getIcon(), abilityX, startY);
 
-                boolean highlighted = ability.isHighlighted(mc.player)
-                        || ("teleport".equals(ability.getId()) && teleportAiming);
-                if (highlighted) {
-                    drawGlint(graphics, ability.getIcon(), abilityX, startY);
-                }
+                boolean highlighted = ability.isHighlighted(mc.player) || ("teleport".equals(ability.getId()) && teleportAiming);
+                if (highlighted) drawGlint(graphics, ability.getIcon(), abilityX, startY);
 
                 if (onCooldown) {
                     int remaining = cooldownTicks.get(ability.getId());
                     int total = cooldownTotal.getOrDefault(ability.getId(), remaining);
                     float ratio = total > 0 ? (float) remaining / total : 0f;
 
-                    graphics.fill(
-                            abilityX + 1, startY + 1,
-                            abilityX + SQUARE_SIZE - 1, startY + SQUARE_SIZE - 1,
-                            COOLDOWN_OVERLAY_COLOR
-                    );
-
-                    int barX = abilityX + 2;
-                    int barY = startY + SQUARE_SIZE - 4;
-                    int barWidth = SQUARE_SIZE - 4;
+                    graphics.fill(abilityX + 1, startY + 1, abilityX + SQUARE_SIZE - 1, startY + SQUARE_SIZE - 1, COOLDOWN_OVERLAY_COLOR);
+                    int barX = abilityX + 2, barY = startY + SQUARE_SIZE - 4, barWidth = SQUARE_SIZE - 4;
                     int barHeight = Math.max(2, Math.min(3, ICON_SIZE / 8));
                     graphics.fill(barX, barY, barX + barWidth, barY + barHeight, PROGRESS_BAR_BG);
                     float progress = 1f - ratio;
                     int filledWidth = (int) (barWidth * progress);
-                    if (filledWidth > 0) {
-                        graphics.fill(barX, barY, barX + filledWidth, barY + barHeight, PROGRESS_BAR_FILL);
-                    }
+                    if (filledWidth > 0) graphics.fill(barX, barY, barX + filledWidth, barY + barHeight, PROGRESS_BAR_FILL);
 
                     int seconds = (remaining + 19) / 20;
                     String timeText = String.valueOf(seconds);
-
                     float sizeScale = Math.max(0.5f, ICON_SIZE / 24.0f);
                     float scale = sizeScale * (timeText.length() <= 1 ? 1.0f : 0.8f);
-
-                    int textW = font.width(timeText);
-                    int textH = 8;
-
-                    int centerX = abilityX + SQUARE_SIZE / 2;
-                    int centerY = startY + SQUARE_SIZE / 2;
+                    int textW = font.width(timeText), textH = 8;
+                    int centerX = abilityX + SQUARE_SIZE / 2, centerY = startY + SQUARE_SIZE / 2;
 
                     graphics.pose().pushMatrix();
                     graphics.pose().translate((float) centerX, (float) centerY);
@@ -535,28 +534,18 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         double mouseX = mc.mouseHandler.xpos() * screenWidth / mc.getWindow().getWidth();
         double mouseY = mc.mouseHandler.ypos() * screenHeight / mc.getWindow().getHeight();
 
-        boolean hoveringClass =
-                mouseX >= classX && mouseX <= classX + SQUARE_SIZE &&
-                        mouseY >= startY && mouseY <= startY + SQUARE_SIZE;
-
+        boolean hoveringClass = mouseX >= classX && mouseX <= classX + SQUARE_SIZE && mouseY >= startY && mouseY <= startY + SQUARE_SIZE;
         if (hoveringClass) {
-            List<String> lines = buildClassTooltip(def);
-            drawTooltip(graphics, font, wrapAll(font, lines, TOOLTIP_MAX_WIDTH),
-                    (int) mouseX, (int) mouseY, screenWidth, screenHeight);
+            drawTooltip(graphics, font, wrapAll(font, buildClassTooltip(def), TOOLTIP_MAX_WIDTH), (int) mouseX, (int) mouseY, screenWidth, screenHeight);
             return;
         }
 
         for (int i = 0; i < abilityPositionsCache.size(); i++) {
             int[] pos = abilityPositionsCache.get(i);
-            boolean hovering =
-                    mouseX >= pos[0] && mouseX <= pos[0] + SQUARE_SIZE &&
-                            mouseY >= pos[1] && mouseY <= pos[1] + SQUARE_SIZE;
-
+            boolean hovering = mouseX >= pos[0] && mouseX <= pos[0] + SQUARE_SIZE && mouseY >= pos[1] && mouseY <= pos[1] + SQUARE_SIZE;
             if (hovering) {
                 Ability ability = abilityListCache.get(i);
-                List<String> lines = buildAbilityTooltip(ability, mc);
-                drawTooltip(graphics, font, wrapAll(font, lines, TOOLTIP_MAX_WIDTH),
-                        (int) mouseX, (int) mouseY, screenWidth, screenHeight);
+                drawTooltip(graphics, font, wrapAll(font, buildAbilityTooltip(ability, mc), TOOLTIP_MAX_WIDTH), (int) mouseX, (int) mouseY, screenWidth, screenHeight);
                 break;
             }
         }
@@ -568,83 +557,55 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             return;
         }
         int[] size = getTextureSize(icon);
-        int srcW = size[0];
-        int srcH = size[1];
-
+        int srcW = size[0], srcH = size[1];
         if (srcW <= 0 || srcH <= 0) {
             graphics.fill(x + ICON_INSET, y + ICON_INSET, x + ICON_INSET + ICON_SIZE, y + ICON_INSET + ICON_SIZE, 0xFF333333);
             return;
         }
-
         Identifier texture = getTexturePath(icon);
-
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) (x + ICON_INSET), (float) (y + ICON_INSET));
         graphics.pose().scale((float) ICON_SIZE / srcW, (float) ICON_SIZE / srcH);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                texture,
-                0, 0, 0.0f, 0.0f,
-                srcW, srcH,
-                srcW, srcH
-        );
+        graphics.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, 0.0f, 0.0f, srcW, srcH, srcW, srcH);
         graphics.pose().popMatrix();
     }
 
     private void drawGlint(GuiGraphicsExtractor graphics, Identifier icon, int x, int y) {
         if (icon == null) return;
         int[] size = getTextureSize(icon);
-        int srcW = size[0];
-        int srcH = size[1];
+        int srcW = size[0], srcH = size[1];
         if (srcW <= 0 || srcH <= 0) return;
-
         Identifier texture = getTexturePath(icon);
-
         graphics.pose().pushMatrix();
         graphics.pose().translate((float) (x + ICON_INSET), (float) (y + ICON_INSET));
         graphics.pose().scale((float) ICON_SIZE / srcW, (float) ICON_SIZE / srcH);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                texture,
-                0, 0, 0.0f, 0.0f,
-                srcW, srcH,
-                srcW, srcH,
-                GLINT_COLOR
-        );
+        graphics.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, 0.0f, 0.0f, srcW, srcH, srcW, srcH, GLINT_COLOR);
         graphics.pose().popMatrix();
     }
 
     private List<String> buildClassTooltip(ClassDefinition def) {
         List<String> lines = new ArrayList<>();
-        if (def == null) {
-            lines.add("§eКласс не выбран");
-            return lines;
-        }
+        if (def == null) { lines.add("§eКласс не выбран"); return lines; }
         lines.add("§6§l" + def.displayName);
         String desc = def.getDescription();
         if (!desc.isEmpty()) lines.add("§7" + desc);
 
-        List<Ability> actives = new ArrayList<>();
-        List<Ability> passives = new ArrayList<>();
+        List<Ability> actives = new ArrayList<>(), passives = new ArrayList<>();
         for (Ability a : def.abilities) {
-            if (a.isPassive()) passives.add(a);
-            else actives.add(a);
+            if (a.isPassive()) passives.add(a); else actives.add(a);
         }
         if (!actives.isEmpty()) {
-            lines.add("");
-            lines.add("§eАктивные способности:");
+            lines.add(""); lines.add("§eАктивные способности:");
             int idx = 0;
             for (Ability a : actives) {
-                String key = idx == 0 ? "§f[" + getPrimaryKeyName() + "]"
-                        : idx == 1 ? "§f[" + getSecondaryKeyName() + "]" : "";
+                String key = idx == 0 ? "§f[" + getPrimaryKeyName() + "]" : idx == 1 ? "§f[" + getSecondaryKeyName() + "]" : "";
                 lines.add(" §a● " + key + " §f" + a.getDisplayName());
                 if (!a.getDescription().isEmpty()) lines.add("    §8" + a.getDescription());
                 idx++;
             }
         }
         if (!passives.isEmpty()) {
-            lines.add("");
-            lines.add("§eПассивные способности:");
+            lines.add(""); lines.add("§eПассивные способности:");
             for (Ability a : passives) {
                 lines.add(" §7● §f" + a.getDisplayName());
                 if (!a.getDescription().isEmpty()) lines.add("    §8" + a.getDescription());
@@ -663,36 +624,18 @@ public class ClassesHardcoreClient implements ClientModInitializer {
             lines.add("§eТип: §7Пассивная");
         } else {
             lines.add("§eТип: §aАктивная");
-            if (ability.getId().equals(cachedFirstActiveAbility)) {
-                lines.add("§eКлавиша: §f[" + getPrimaryKeyName() + "]");
-            } else if (ability.getId().equals(cachedSecondActiveAbility)) {
-                lines.add("§eКлавиша: §f[" + getSecondaryKeyName() + "]");
-            }
+            if (ability.getId().equals(cachedFirstActiveAbility)) lines.add("§eКлавиша: §f[" + getPrimaryKeyName() + "]");
+            else if (ability.getId().equals(cachedSecondActiveAbility)) lines.add("§eКлавиша: §f[" + getSecondaryKeyName() + "]");
+
             int remaining = cooldownTicks.getOrDefault(ability.getId(), 0);
-            if (remaining > 0) {
-                int seconds = (remaining + 19) / 20;
-                lines.add("§eСтатус: §cПерезарядка (" + seconds + "s)");
-            } else if ("teleport".equals(ability.getId()) && teleportAiming) {
-                lines.add("§eСтатус: §bВыбор точки (§fнажми ещё раз§b)");
-            } else if ("vampire_drain".equals(ability.getId()) && AbilityClientState.vampireActiveTicks > 0) {
-                int seconds = (AbilityClientState.vampireActiveTicks + 19) / 20;
-                lines.add("§eСтатус: §bАктивна (§f" + seconds + "s§b)");
-            } else if ("invisibility".equals(ability.getId()) && AbilityClientState.invisibilityActiveTicks > 0) {
-                int seconds = (AbilityClientState.invisibilityActiveTicks + 19) / 20;
-                lines.add("§eСтатус: §bНевидимость (§f" + seconds + "s§b)");
-            } else if ("runner_sprint".equals(ability.getId()) && AbilityClientState.runnerSprintTicks > 0) {
-                int seconds = (AbilityClientState.runnerSprintTicks + 19) / 20;
-                lines.add("§eСтатус: §bРазгон (§f" + seconds + "s§b)");
-            } else {
-                lines.add("§eСтатус: §aГотова к использованию");
-            }
+            if (remaining > 0) lines.add("§eСтатус: §cПерезарядка (" + ((remaining + 19) / 20) + "s)");
+            else if ("teleport".equals(ability.getId()) && teleportAiming) lines.add("§eСтатус: §bВыбор точки (§fнажми ещё раз§b)");
+            else if (AbilityClientState.armedAbilities.contains(ability.getId())) lines.add("§eСтатус: §bАктивирована (§fЖдет удара§b)");
+            else lines.add("§eСтатус: §aГотова к использованию");
         }
 
         List<String> extra = ability.getExtraTooltipLines(mc.player);
-        if (!extra.isEmpty()) {
-            lines.add("");
-            lines.addAll(extra);
-        }
+        if (!extra.isEmpty()) { lines.add(""); lines.addAll(extra); }
         return lines;
     }
 
@@ -710,11 +653,9 @@ public class ClassesHardcoreClient implements ClientModInitializer {
         String stylePrefix = "";
         int styleEnd = 0;
         while (styleEnd + 1 < text.length() && text.charAt(styleEnd) == '§') {
-            stylePrefix += text.substring(styleEnd, styleEnd + 2);
-            styleEnd += 2;
+            stylePrefix += text.substring(styleEnd, styleEnd + 2); styleEnd += 2;
         }
         String content = text.substring(styleEnd);
-
         StringBuilder currentLine = new StringBuilder(stylePrefix);
         int currentWidth = 0;
         for (String word : content.split(" ")) {
@@ -725,12 +666,8 @@ public class ClassesHardcoreClient implements ClientModInitializer {
                 currentLine = new StringBuilder(stylePrefix + word);
                 currentWidth = wordWidth;
             } else {
-                if (currentWidth > 0) {
-                    currentLine.append(" ");
-                    currentWidth += spaceWidth;
-                }
-                currentLine.append(word);
-                currentWidth += wordWidth;
+                if (currentWidth > 0) { currentLine.append(" "); currentWidth += spaceWidth; }
+                currentLine.append(word); currentWidth += wordWidth;
             }
         }
         if (currentWidth > 0) result.add(currentLine.toString());
@@ -747,25 +684,19 @@ public class ClassesHardcoreClient implements ClientModInitializer {
 
     private void drawTooltip(GuiGraphicsExtractor graphics, Font font, List<String> lines,
                              int mouseX, int mouseY, int screenWidth, int screenHeight) {
-        int lineHeight = 11;
-        int padding = 5;
-        int tooltipWidth = 0;
+        int lineHeight = 11, padding = 5, tooltipWidth = 0;
         for (String line : lines) tooltipWidth = Math.max(tooltipWidth, font.width(line));
         tooltipWidth += padding * 2;
         int tooltipHeight = lines.size() * lineHeight + padding * 2;
 
-        int tooltipX = mouseX + 12;
-        int tooltipY = mouseY - tooltipHeight - 6;
+        int tooltipX = mouseX + 12, tooltipY = mouseY - tooltipHeight - 6;
         if (tooltipX + tooltipWidth > screenWidth - 4) tooltipX = screenWidth - tooltipWidth - 4;
         if (tooltipX < 4) tooltipX = 4;
         if (tooltipY < 4) tooltipY = mouseY + 12;
         if (tooltipY + tooltipHeight > screenHeight - 4) tooltipY = screenHeight - tooltipHeight - 4;
 
-        graphics.fill(tooltipX - 1, tooltipY - 1,
-                tooltipX + tooltipWidth + 1, tooltipY + tooltipHeight + 1, TOOLTIP_BORDER);
-        graphics.fill(tooltipX, tooltipY,
-                tooltipX + tooltipWidth, tooltipY + tooltipHeight, TOOLTIP_BG);
-
+        graphics.fill(tooltipX - 1, tooltipY - 1, tooltipX + tooltipWidth + 1, tooltipY + tooltipHeight + 1, TOOLTIP_BORDER);
+        graphics.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, TOOLTIP_BG);
         int textY = tooltipY + padding;
         for (String line : lines) {
             graphics.text(font, line, tooltipX + padding, textY, TEXT_COLOR, false);
