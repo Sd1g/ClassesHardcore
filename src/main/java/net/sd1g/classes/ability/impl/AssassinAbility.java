@@ -44,9 +44,11 @@ public class AssassinAbility implements Ability {
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
-        double bonus = AbilityClientState.assassinBonusDamage;
+        // ИСПРАВЛЕНО: Убрано деление на 2.0
+        double bonusDamage = AbilityClientState.assassinBonusDamage;
+
         return List.of(
-                "§7Накопленный бонус: §c+" + String.format("%.1f", bonus) + " урона",
+                "§7Накопленный бонус: §c+" + String.format("%.1f", bonusDamage) + " HP урона",
                 "§7Прогресс сбрасывается при смене класса"
         );
     }

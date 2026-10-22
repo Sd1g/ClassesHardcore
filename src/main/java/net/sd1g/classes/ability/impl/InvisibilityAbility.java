@@ -43,12 +43,10 @@ public class InvisibilityAbility implements Ability {
         int dur = cfg.getIntEffect("invisibility_duration_ticks", 100) / 20;
         int cd = cfg.getCooldown("invisibility", 1200) / 20;
 
-        // Динамический расчет множителя урона из конфига (по умолчанию 3.0 = +200%)
         double mult = cfg.getEffect("ambush_damage_multiplier", 3.0);
         int bonusPercent = (int) Math.round((mult - 1.0) * 100);
 
-        // Динамический расчет чистого урона из конфига
-        double pureDmg = cfg.getEffect("ambush_pure_damage", 2.0) / 2.0;
+        double pureDmg = cfg.getEffect("ambush_pure_damage", 2.0);
 
         return "Невидимость на " + dur + " сек. Первый удар наносит +" + bonusPercent + "% урона + " + pureDmg + " НР чистого урона. Перезарядка: " + cd + " сек.";
     }
@@ -75,7 +73,6 @@ public class InvisibilityAbility implements Ability {
         ServerPlayNetworking.send(player, new InvisibilitySyncPayload(duration));
         ServerPlayNetworking.send(player, new ActiveTimerPayload("invisibility", duration));
 
-        // Эффект исчезновения
         spawnInvisibilityEffect(player.level(), player, false);
 
         player.sendOverlayMessage(Component.literal("§bНевидимость на " + (duration/20) + " сек."));
@@ -94,7 +91,6 @@ public class InvisibilityAbility implements Ability {
             PlayerClassData.markDirty(player);
             ServerPlayNetworking.send(player, new InvisibilitySyncPayload(0));
 
-            // Эффект появления
             spawnInvisibilityEffect(player.level(), player, true);
 
             player.sendOverlayMessage(Component.literal("§bНевидимость закончилась"));
@@ -119,10 +115,6 @@ public class InvisibilityAbility implements Ability {
             double x = target.getX();
             double y = target.getY() + (target.getBbHeight() / 2.0);
             double z = target.getZ();
-
-            // ==========================================
-            // ЭПИЧНЫЙ ЭФФЕКТ УДАРА ИЗ ТЕНИ
-            // ==========================================
 
             level.sendParticles(new DustParticleOptions(0x000000, 2.5f), x, y, z, 60, 0.6, 0.6, 0.6, 0.2);
             level.sendParticles(new DustParticleOptions(0x4B0082, 2.0f), x, y, z, 40, 0.5, 0.5, 0.5, 0.15);

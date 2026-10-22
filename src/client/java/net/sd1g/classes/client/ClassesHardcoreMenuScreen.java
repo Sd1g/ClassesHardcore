@@ -42,9 +42,19 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private static final int PADDING = 10;
     private static final int ITEM_HEIGHT = 56;
     private static final int ITEM_SPACING = 8;
-    private static final int COLUMNS = 3;
-    private static final int ICON_SIZE = 40;
+    private int columns;
     private int columnWidth;
+
+    // Прокрутка
+    private int leftScrollOffset = 0;
+    private int rightScrollOffset = 0;
+    private int rightMaxScroll = 0;
+
+    // Перетаскивание
+    private boolean draggingLeft = false;
+    private boolean draggingRight = false;
+    private double dragStartY = 0;
+    private int dragStartOffset = 0;
 
     private static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
 
@@ -60,15 +70,18 @@ public class ClassesHardcoreMenuScreen extends Screen {
         this.rightPanelX = leftPanelWidth + PADDING * 2;
         this.mainContentHeight = this.height - mainContentY - 40;
 
-        this.columnWidth = (leftPanelWidth - PADDING * 2) / COLUMNS;
+        this.columns = Math.max(2, Math.min(4, this.width / 350));
+        this.columnWidth = (leftPanelWidth - PADDING * 2) / columns;
 
-        // СОРТИРОВКА КЛАССОВ ПО АЛФАВИТУ
         this.allClasses = new ArrayList<>(ClassRegistry.getAll().values());
         this.allClasses.sort(Comparator.comparing(def -> def.displayName.toLowerCase()));
 
         if (selectedClass == null && !allClasses.isEmpty()) {
             selectedClass = allClasses.getFirst();
         }
+
+        this.leftScrollOffset = 0;
+        this.rightScrollOffset = 0;
         updateCachedText();
 
         int buttonY = this.height - 30;
@@ -77,7 +90,6 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         int buttonWidth = isAdmin ? (rightPanelWidth - PADDING * 2) / 3 : (rightPanelWidth - PADDING) / 2;
 
-        // КАСТОМНЫЕ КНОПКИ
         this.addRenderableWidget(new ModButton(
                 rightPanelX, buttonY, buttonWidth, 24,
                 Component.literal("§eСлучайная смена"),
@@ -103,6 +115,12 @@ public class ClassesHardcoreMenuScreen extends Screen {
         }
     }
 
+    private int getLeftMaxScroll() {
+        int rows = (int) Math.ceil(allClasses.size() / (double) columns);
+        int totalHeight = rows * (ITEM_HEIGHT + ITEM_SPACING);
+        return Math.max(0, totalHeight - mainContentHeight + 20);
+    }
+
     private void updateCachedText() {
         if (selectedClass == null) return;
         cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
@@ -118,7 +136,7 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         renderTopPanel(gfx);
         renderLeftPanel(gfx, mouseX, mouseY);
-        renderRightPanel(gfx);
+        renderRightPanel(gfx, mouseX, mouseY);
 
         super.extractRenderState(gfx, mouseX, mouseY, partialTick);
     }
@@ -146,40 +164,47 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         int startY = mainContentY + 10;
         int startX = PADDING + 10;
+        int actualColumnWidth = (leftPanelWidth - PADDING * 2) / columns;
+        int currentIconSize = Math.max(32, Math.min(48, actualColumnWidth / 4));
+
+        gfx.enableScissor(PADDING, mainContentY, PADDING + leftPanelWidth, mainContentY + mainContentHeight);
 
         for (int i = 0; i < allClasses.size(); i++) {
             ClassDefinition def = allClasses.get(i);
-            int col = i % COLUMNS;
-            int row = i / COLUMNS;
+            int col = i % columns;
+            int row = i / columns;
 
-            int x = startX + col * columnWidth;
-            int y = startY + row * (ITEM_HEIGHT + ITEM_SPACING);
+            int x = startX + col * actualColumnWidth;
+            int y = (int) (startY + row * (ITEM_HEIGHT + ITEM_SPACING) - leftScrollOffset);
 
-            if (y + ITEM_HEIGHT > mainContentY + mainContentHeight - 5) continue;
+            if (y + ITEM_HEIGHT < mainContentY || y > mainContentY + mainContentHeight) continue;
 
-            boolean isHovered = mouseX >= x && mouseX <= x + columnWidth - ITEM_SPACING
+            boolean isHovered = mouseX >= x && mouseX <= x + actualColumnWidth - ITEM_SPACING
                     && mouseY >= y && mouseY <= y + ITEM_HEIGHT;
 
             if (isHovered) {
-                gfx.fill(x, y, x + columnWidth - ITEM_SPACING, y + ITEM_HEIGHT, 0x22FFFFFF);
+                gfx.fill(x, y, x + actualColumnWidth - ITEM_SPACING, y + ITEM_HEIGHT, 0x22FFFFFF);
             }
             if (def == selectedClass) {
-                gfx.fill(x, y, x + columnWidth - ITEM_SPACING, y + ITEM_HEIGHT, 0x44FFAA00);
+                gfx.fill(x, y, x + actualColumnWidth - ITEM_SPACING, y + ITEM_HEIGHT, 0x44FFAA00);
                 gfx.fill(x, y, x + 3, y + ITEM_HEIGHT, 0xFFFFAA00);
             }
 
-            drawIcon(gfx, def.icon, x + 8, y + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
+            drawIcon(gfx, def.icon, x + 8, y + (ITEM_HEIGHT - currentIconSize) / 2, currentIconSize);
 
             String displayName = def.displayName;
-            int maxTextWidth = columnWidth - ICON_SIZE - 20;
+            int maxTextWidth = actualColumnWidth - currentIconSize - 20;
             if (this.font.width(displayName) > maxTextWidth) {
                 displayName = this.font.plainSubstrByWidth(displayName, maxTextWidth - 5) + "...";
             }
-            gfx.text(this.font, displayName, x + ICON_SIZE + 20, y + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
+            gfx.text(this.font, displayName, x + currentIconSize + 20, y + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
         }
+
+        gfx.disableScissor();
+        drawScrollbar(gfx, PADDING + leftPanelWidth - 8, mainContentY, leftScrollOffset, getLeftMaxScroll());
     }
 
-    private void renderRightPanel(GuiGraphicsExtractor gfx) {
+    private void renderRightPanel(GuiGraphicsExtractor gfx, int mouseX, int mouseY) {
         drawBeveledPanel(gfx, rightPanelX, mainContentY, rightPanelWidth, mainContentHeight, 0xCC151515);
 
         if (selectedClass == null) return;
@@ -187,10 +212,14 @@ public class ClassesHardcoreMenuScreen extends Screen {
         int contentX = rightPanelX + PADDING + 5;
         int contentY = mainContentY + PADDING + 5;
 
-        drawIcon(gfx, selectedClass.icon, contentX, contentY, 48);
-        gfx.text(this.font, "§l" + selectedClass.displayName, contentX + 48 + 15, contentY + 16, 0xFFFFAA00, true);
+        gfx.enableScissor(rightPanelX, mainContentY, rightPanelX + rightPanelWidth, mainContentY + mainContentHeight);
 
-        int textY = contentY + 48 + 15;
+        int yOffset = contentY - rightScrollOffset;
+
+        drawIcon(gfx, selectedClass.icon, contentX, yOffset, 48);
+        gfx.text(this.font, "§l" + selectedClass.displayName, contentX + 48 + 15, yOffset + 16, 0xFFFFAA00, true);
+
+        int textY = yOffset + 48 + 15;
 
         for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
@@ -212,6 +241,24 @@ public class ClassesHardcoreMenuScreen extends Screen {
                 abiY += 11;
             }
             textY = abiY + 10;
+        }
+
+        gfx.disableScissor();
+
+        int contentBottom = textY;
+        rightMaxScroll = Math.max(0, contentBottom - (mainContentY + mainContentHeight) + 10);
+        rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+
+        drawScrollbar(gfx, rightPanelX + rightPanelWidth - 8, mainContentY, rightScrollOffset, rightMaxScroll);
+    }
+
+    private void drawScrollbar(GuiGraphicsExtractor gfx, int x, int y, int offset, int maxScroll) {
+        if (maxScroll > 0) {
+            int barHeight = (int) ((float) mainContentHeight / (mainContentHeight + maxScroll) * mainContentHeight);
+            int barY = y + (int) ((float) offset / maxScroll * (mainContentHeight - barHeight));
+
+            gfx.fill(x, y, x + 4, y + mainContentHeight, 0x44FFFFFF);
+            gfx.fill(x, barY, x + 4, barY + barHeight, 0xFFFFAA00);
         }
     }
 
@@ -270,18 +317,36 @@ public class ClassesHardcoreMenuScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
 
+        int leftBarX = PADDING + leftPanelWidth - 8;
+        if (getLeftMaxScroll() > 0 && mouseX >= leftBarX && mouseX <= leftBarX + 4 && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            draggingLeft = true;
+            dragStartY = mouseY;
+            dragStartOffset = leftScrollOffset;
+            return true;
+        }
+
+        int rightBarX = rightPanelX + rightPanelWidth - 8;
+        if (rightMaxScroll > 0 && mouseX >= rightBarX && mouseX <= rightBarX + 4 && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            draggingRight = true;
+            dragStartY = mouseY;
+            dragStartOffset = rightScrollOffset;
+            return true;
+        }
+
         if (mouseX < leftPanelWidth && event.button() == 0) {
             int startY = mainContentY + 10;
             int startX = PADDING + 10;
+            int actualColumnWidth = (leftPanelWidth - PADDING * 2) / columns;
 
             for (int i = 0; i < allClasses.size(); i++) {
                 ClassDefinition def = allClasses.get(i);
-                int x = startX + (i % COLUMNS) * columnWidth;
-                int y = startY + (i / COLUMNS) * (ITEM_HEIGHT + ITEM_SPACING);
+                int x = startX + (i % columns) * actualColumnWidth;
+                int y = (int) (startY + (i / columns) * (ITEM_HEIGHT + ITEM_SPACING) - leftScrollOffset);
 
-                if (mouseX >= x && mouseX <= x + columnWidth - ITEM_SPACING && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
+                if (mouseX >= x && mouseX <= x + actualColumnWidth - ITEM_SPACING && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
                     if (selectedClass != def) {
                         selectedClass = def;
+                        rightScrollOffset = 0;
                         updateCachedText();
                     }
                     return true;
@@ -292,17 +357,74 @@ public class ClassesHardcoreMenuScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double offsetX, double offsetY) {
+        double mouseY = event.y();
+
+        if (draggingLeft) {
+            int maxScroll = getLeftMaxScroll();
+            double scrollableArea = mainContentHeight - 20;
+            if (scrollableArea > 0 && maxScroll > 0) {
+                double deltaY = mouseY - dragStartY;
+                float scrollAmount = (float) (deltaY / scrollableArea * maxScroll);
+                leftScrollOffset = (int) (dragStartOffset + scrollAmount);
+                leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxScroll));
+            }
+            return true;
+        }
+
+        if (draggingRight) {
+            double scrollableArea = mainContentHeight - 20;
+            if (scrollableArea > 0 && rightMaxScroll > 0) {
+                double deltaY = mouseY - dragStartY;
+                float scrollAmount = (float) (deltaY / scrollableArea * rightMaxScroll);
+                rightScrollOffset = (int) (dragStartOffset + scrollAmount);
+                rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+            }
+            return true;
+        }
+
+        return super.mouseDragged(event, offsetX, offsetY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        draggingLeft = false;
+        draggingRight = false;
+        return super.mouseReleased(event);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX >= PADDING && mouseX <= PADDING + leftPanelWidth && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            int maxScroll = getLeftMaxScroll();
+            if (maxScroll > 0) {
+                leftScrollOffset -= scrollY * 20;
+                leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxScroll));
+                return true;
+            }
+        }
+
+        if (mouseX >= rightPanelX && mouseX <= rightPanelX + rightPanelWidth && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            if (rightMaxScroll > 0) {
+                rightScrollOffset -= scrollY * 20;
+                rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+                return true;
+            }
+        }
+
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
     public void onClose() {
         Minecraft.getInstance().gui.setScreen(parent);
     }
 
-    // ВНУТРЕННИЙ КЛАСС ДЛЯ КАСТОМНЫХ КНОПОК
     private class ModButton extends Button {
         public ModButton(int x, int y, int width, int height, Component message, OnPress onPress) {
             super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
         }
 
-        // ИСПРАВЛЕНИЕ: renderWidget -> extractContents
         @Override
         protected void extractContents(GuiGraphicsExtractor gfx, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isHoveredOrFocused();

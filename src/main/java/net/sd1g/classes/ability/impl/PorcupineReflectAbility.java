@@ -31,7 +31,7 @@ public class PorcupineReflectAbility implements Ability {
     public String getDescription() {
         ModConfig cfg = ModConfig.getInstance();
         int chance = (int) Math.round(cfg.getEffect("porcupine_reflect_chance", 0.30) * 100);
-        double dmg = cfg.getEffect("porcupine_reflect_damage", 2.0) / 2.0;
+        double dmg = cfg.getEffect("porcupine_reflect_damage", 2.0);
         return "С шансом " + chance + "% наносит " + dmg + " НР чистого урона атакующему.";
     }
 
@@ -65,11 +65,9 @@ public class PorcupineReflectAbility implements Ability {
                 double y = player.getY() + 1.0;
                 double z = player.getZ();
 
-                // ЭФФЕКТ: Сфера шипов вокруг игрока
                 level.sendParticles(ParticleTypes.CRIT, x, y, z, 60, radius, radius, radius, 0.1);
                 level.sendParticles(ParticleTypes.SWEEP_ATTACK, x, y, z, 2, radius, radius, radius, 0.1);
 
-                // Звук вылетания шипов
                 level.playSound(null, x, y, z, SoundEvents.PUFFER_FISH_STING, SoundSource.PLAYERS, 1.0f, 1.4f);
 
                 ServerPlayNetworking.send(player, new HudMessagePayload("§cИглы!", 0xFFFF5555, 40));

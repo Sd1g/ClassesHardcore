@@ -8,8 +8,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.sd1g.classes.ClassesHardcore;
 import net.sd1g.classes.ability.Ability;
@@ -37,7 +35,7 @@ public class SecondWindAbility implements Ability {
         int hp = (int) cfg.getEffect("second_wind_absorption_hp", 4.0);
         int dur = cfg.getIntEffect("second_wind_duration_ticks", 300) / 20;
         int cd = cfg.getCooldown("second_wind", 900) / 20;
-        return "Даёт " + (hp / 2) + " золотых сердец на " + dur + " сек. Перезарядка: " + cd + " сек.";
+        return "Даёт " + hp + " HP поглощения на " + dur + " сек. Перезарядка: " + cd + " сек.";
     }
 
     @Override
@@ -52,23 +50,17 @@ public class SecondWindAbility implements Ability {
         int hp = (int) cfg.getEffect("second_wind_absorption_hp", 4.0);
         int dur = cfg.getIntEffect("second_wind_duration_ticks", 300);
 
-        int amplifier = Math.max(0, (hp / 4) - 1);
-        player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, dur, amplifier, false, true, true));
+        // Просто даем поглощение равное значению из конфига
+        player.setAbsorptionAmount(hp);
 
         ServerPlayNetworking.send(player, new ActiveTimerPayload("second_wind", dur));
 
         ServerLevel level = player.level();
+        level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, player.getX(), player.getY() + 1, player.getZ(), 25, 0.4, 0.8, 0.4, 0.2);
+        level.sendParticles(ParticleTypes.HAPPY_VILLAGER, player.getX(), player.getY() + 0.5, player.getZ(), 15, 0.5, 0.5, 0.5, 0.02);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 0.4f, 1.8f);
 
-        // Эффекты на игроке: Сердечки и золотые искры
-        level.sendParticles(ParticleTypes.HEART, player.getX(), player.getY() + 1.2, player.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
-        level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, player.getX(), player.getY() + 1.0, player.getZ(), 30, 0.5, 0.5, 0.5, 0.1);
-        level.sendParticles(ParticleTypes.END_ROD, player.getX(), player.getY() + 1.0, player.getZ(), 15, 0.5, 0.5, 0.5, 0.05);
-
-        // Эпичный звук активации (Тотем + Маяк)
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 0.8f, 1.2f);
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.5f);
-
-        player.sendOverlayMessage(Component.literal("§eВторое дыхание. §f+" + (hp / 2) + " сердец."));
+        player.sendOverlayMessage(Component.literal("§eВторое дыхание. §f+" + hp + " HP."));
         return true;
     }
 }

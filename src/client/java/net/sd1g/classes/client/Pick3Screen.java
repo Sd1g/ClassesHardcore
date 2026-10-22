@@ -51,13 +51,23 @@ public class Pick3Screen extends Screen {
     private static final int ICON_SIZE = 48;
     private int itemWidth;
 
+    // Прокрутка
+    private int leftScrollOffset = 0;
+    private int rightScrollOffset = 0;
+    private int rightMaxScroll = 0;
+
+    // Перетаскивание
+    private boolean draggingLeft = false;
+    private boolean draggingRight = false;
+    private double dragStartY = 0;
+    private int dragStartOffset = 0;
+
     private static final Map<Identifier, int[]> TEXTURE_SIZE_CACHE = new HashMap<>();
 
     public Pick3Screen(Screen parent, List<String> options) {
         super(Component.literal("Выбор из 3"));
         this.parent = parent;
 
-        // СОРТИРОВКА ВАРИАНТОВ ПО АЛФАВИТУ
         this.options = new ArrayList<>(options);
         this.options.sort(Comparator.comparing(id -> {
             ClassDefinition def = ClassRegistry.get(id);
@@ -80,10 +90,12 @@ public class Pick3Screen extends Screen {
             updateCachedText();
         }
 
+        this.leftScrollOffset = 0;
+        this.rightScrollOffset = 0;
+
         int buttonY = this.height - 30;
         int buttonWidth = (rightPanelWidth - PADDING) / 2;
 
-        // КАСТОМНЫЕ КНОПКИ
         this.selectButton = new ModButton(
                 rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24,
                 Component.literal("§aПодтвердить выбор"),
@@ -129,6 +141,11 @@ public class Pick3Screen extends Screen {
         this.addRenderableWidget(this.warningNoButton);
 
         updateWarningButtons();
+    }
+
+    private int getLeftMaxScroll() {
+        int totalHeight = options.size() * (ITEM_HEIGHT + ITEM_SPACING);
+        return Math.max(0, totalHeight - mainContentHeight + 40);
     }
 
     private void updateCachedText() {
@@ -208,11 +225,15 @@ public class Pick3Screen extends Screen {
         int startY = mainContentY + 15;
         int startX = PADDING + 15;
 
+        gfx.enableScissor(PADDING, mainContentY, PADDING + leftPanelWidth, mainContentY + mainContentHeight);
+
         for (int i = 0; i < options.size(); i++) {
             ClassDefinition def = ClassRegistry.get(options.get(i));
             if (def == null) continue;
 
-            int y = startY + i * (ITEM_HEIGHT + ITEM_SPACING);
+            int y = (int) (startY + i * (ITEM_HEIGHT + ITEM_SPACING) - leftScrollOffset);
+
+            if (y + ITEM_HEIGHT < mainContentY || y > mainContentY + mainContentHeight) continue;
 
             boolean isHovered = mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= y && mouseY <= y + ITEM_HEIGHT;
 
@@ -228,24 +249,29 @@ public class Pick3Screen extends Screen {
             gfx.text(this.font, "§l" + def.displayName, startX + ICON_SIZE + 20, y + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
         }
 
-        int currentY = startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20;
+        int currentY = (int) (startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20 - leftScrollOffset);
         gfx.fill(startX, currentY - 10, startX + itemWidth, currentY - 9, 0xFF444444);
 
         ClassDefinition currentDef = ClassRegistry.get(ClassesHardcoreClient.currentClass);
         if (currentDef != null) {
-            boolean isHovered = mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= currentY && mouseY <= currentY + ITEM_HEIGHT;
+            if (currentY + ITEM_HEIGHT >= mainContentY && currentY <= mainContentY + mainContentHeight) {
+                boolean isHovered = mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= currentY && mouseY <= currentY + ITEM_HEIGHT;
 
-            if (isHovered && (!viewingCurrentClass || selectedClass != currentDef) && !showCancelWarning) {
-                gfx.fill(startX, currentY, startX + itemWidth, currentY + ITEM_HEIGHT, 0x22FFFFFF);
-            }
-            if (viewingCurrentClass) {
-                gfx.fill(startX, currentY, startX + itemWidth, currentY + ITEM_HEIGHT, 0x4444FF44);
-                gfx.fill(startX, currentY, startX + 3, currentY + ITEM_HEIGHT, 0xFF44FF44);
-            }
+                if (isHovered && (!viewingCurrentClass || selectedClass != currentDef) && !showCancelWarning) {
+                    gfx.fill(startX, currentY, startX + itemWidth, currentY + ITEM_HEIGHT, 0x22FFFFFF);
+                }
+                if (viewingCurrentClass) {
+                    gfx.fill(startX, currentY, startX + itemWidth, currentY + ITEM_HEIGHT, 0x4444FF44);
+                    gfx.fill(startX, currentY, startX + 3, currentY + ITEM_HEIGHT, 0xFF44FF44);
+                }
 
-            drawIcon(gfx, currentDef.icon, startX + 10, currentY + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
-            gfx.text(this.font, "§7Ваш класс: §f" + currentDef.displayName, startX + ICON_SIZE + 20, currentY + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
+                drawIcon(gfx, currentDef.icon, startX + 10, currentY + (ITEM_HEIGHT - ICON_SIZE) / 2, ICON_SIZE);
+                gfx.text(this.font, "§7Ваш класс: §f" + currentDef.displayName, startX + ICON_SIZE + 20, currentY + (ITEM_HEIGHT - 8) / 2, 0xFFFFFFFF, true);
+            }
         }
+
+        gfx.disableScissor();
+        drawScrollbar(gfx, PADDING + leftPanelWidth - 8, mainContentY, leftScrollOffset, getLeftMaxScroll());
     }
 
     private void renderRightPanel(GuiGraphicsExtractor gfx) {
@@ -256,11 +282,15 @@ public class Pick3Screen extends Screen {
         int contentX = rightPanelX + PADDING + 5;
         int contentY = mainContentY + PADDING + 5;
 
-        drawIcon(gfx, selectedClass.icon, contentX, contentY, 48);
-        String title = viewingCurrentClass ? "§7[Текущий] §l" + selectedClass.displayName : "§l" + selectedClass.displayName;
-        gfx.text(this.font, title, contentX + 48 + 15, contentY + 16, 0xFFFFAA00, true);
+        gfx.enableScissor(rightPanelX, mainContentY, rightPanelX + rightPanelWidth, mainContentY + mainContentHeight);
 
-        int textY = contentY + 48 + 15;
+        int yOffset = contentY - rightScrollOffset;
+
+        drawIcon(gfx, selectedClass.icon, contentX, yOffset, 48);
+        String title = viewingCurrentClass ? "§7[Текущий] §l" + selectedClass.displayName : "§l" + selectedClass.displayName;
+        gfx.text(this.font, title, contentX + 48 + 15, yOffset + 16, 0xFFFFAA00, true);
+
+        int textY = yOffset + 48 + 15;
 
         for (FormattedCharSequence line : cachedDescLines) {
             gfx.text(this.font, line, contentX, textY, 0xFFAAAAAA, true);
@@ -282,6 +312,24 @@ public class Pick3Screen extends Screen {
                 abiY += 11;
             }
             textY = abiY + 10;
+        }
+
+        gfx.disableScissor();
+
+        int contentBottom = textY;
+        rightMaxScroll = Math.max(0, contentBottom - (mainContentY + mainContentHeight) + 10);
+        rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+
+        drawScrollbar(gfx, rightPanelX + rightPanelWidth - 8, mainContentY, rightScrollOffset, rightMaxScroll);
+    }
+
+    private void drawScrollbar(GuiGraphicsExtractor gfx, int x, int y, int offset, int maxScroll) {
+        if (maxScroll > 0) {
+            int barHeight = (int) ((float) mainContentHeight / (mainContentHeight + maxScroll) * mainContentHeight);
+            int barY = y + (int) ((float) offset / maxScroll * (mainContentHeight - barHeight));
+
+            gfx.fill(x, y, x + 4, y + mainContentHeight, 0x44FFFFFF);
+            gfx.fill(x, barY, x + 4, barY + barHeight, 0xFFFFAA00);
         }
     }
 
@@ -344,29 +392,47 @@ public class Pick3Screen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
 
+        int leftBarX = PADDING + leftPanelWidth - 8;
+        if (getLeftMaxScroll() > 0 && mouseX >= leftBarX && mouseX <= leftBarX + 4 && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            draggingLeft = true;
+            dragStartY = mouseY;
+            dragStartOffset = leftScrollOffset;
+            return true;
+        }
+
+        int rightBarX = rightPanelX + rightPanelWidth - 8;
+        if (rightMaxScroll > 0 && mouseX >= rightBarX && mouseX <= rightBarX + 4 && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            draggingRight = true;
+            dragStartY = mouseY;
+            dragStartOffset = rightScrollOffset;
+            return true;
+        }
+
         if (mouseX < leftPanelWidth && event.button() == 0) {
             int startY = mainContentY + 15;
             int startX = PADDING + 15;
 
             for (int i = 0; i < options.size(); i++) {
-                int y = startY + i * (ITEM_HEIGHT + ITEM_SPACING);
+                int y = (int) (startY + i * (ITEM_HEIGHT + ITEM_SPACING) - leftScrollOffset);
                 if (mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= y && mouseY <= y + ITEM_HEIGHT) {
                     ClassDefinition newDef = ClassRegistry.get(options.get(i));
                     if (selectedClass != newDef || viewingCurrentClass) {
                         selectedClass = newDef;
                         viewingCurrentClass = false;
+                        rightScrollOffset = 0;
                         updateCachedText();
                     }
                     return true;
                 }
             }
 
-            int currentY = startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20;
+            int currentY = (int) (startY + options.size() * (ITEM_HEIGHT + ITEM_SPACING) + 20 - leftScrollOffset);
             ClassDefinition currentDef = ClassRegistry.get(ClassesHardcoreClient.currentClass);
             if (currentDef != null && mouseX >= startX && mouseX <= startX + itemWidth && mouseY >= currentY && mouseY <= currentY + ITEM_HEIGHT) {
                 if (selectedClass != currentDef || !viewingCurrentClass) {
                     selectedClass = currentDef;
                     viewingCurrentClass = true;
+                    rightScrollOffset = 0;
                     updateCachedText();
                 }
                 return true;
@@ -376,11 +442,69 @@ public class Pick3Screen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double offsetX, double offsetY) {
+        double mouseY = event.y();
+
+        if (draggingLeft) {
+            int maxScroll = getLeftMaxScroll();
+            double scrollableArea = mainContentHeight - 20;
+            if (scrollableArea > 0 && maxScroll > 0) {
+                double deltaY = mouseY - dragStartY;
+                float scrollAmount = (float) (deltaY / scrollableArea * maxScroll);
+                leftScrollOffset = (int) (dragStartOffset + scrollAmount);
+                leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxScroll));
+            }
+            return true;
+        }
+
+        if (draggingRight) {
+            double scrollableArea = mainContentHeight - 20;
+            if (scrollableArea > 0 && rightMaxScroll > 0) {
+                double deltaY = mouseY - dragStartY;
+                float scrollAmount = (float) (deltaY / scrollableArea * rightMaxScroll);
+                rightScrollOffset = (int) (dragStartOffset + scrollAmount);
+                rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+            }
+            return true;
+        }
+
+        return super.mouseDragged(event, offsetX, offsetY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        draggingLeft = false;
+        draggingRight = false;
+        return super.mouseReleased(event);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX >= PADDING && mouseX <= PADDING + leftPanelWidth && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            int maxScroll = getLeftMaxScroll();
+            if (maxScroll > 0) {
+                leftScrollOffset -= scrollY * 20;
+                leftScrollOffset = Math.max(0, Math.min(leftScrollOffset, maxScroll));
+                return true;
+            }
+        }
+
+        if (mouseX >= rightPanelX && mouseX <= rightPanelX + rightPanelWidth && mouseY >= mainContentY && mouseY <= mainContentY + mainContentHeight) {
+            if (rightMaxScroll > 0) {
+                rightScrollOffset -= scrollY * 20;
+                rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
+                return true;
+            }
+        }
+
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
     public void onClose() {
         Minecraft.getInstance().gui.setScreen(parent);
     }
 
-    // ВНУТРЕННИЙ КЛАСС ДЛЯ КАСТОМНЫХ КНОПОК
     private class ModButton extends Button {
         public ModButton(int x, int y, int width, int height, Component message, OnPress onPress) {
             super(x, y, width, height, message, onPress, DEFAULT_NARRATION);

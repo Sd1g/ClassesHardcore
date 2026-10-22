@@ -1,12 +1,9 @@
 package net.sd1g.classes.ability.impl;
 
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -41,14 +38,14 @@ public class IceStrikeAbility implements Ability {
         ModConfig cfg = ModConfig.getInstance();
         double dmg = cfg.getEffect("ice_strike_bonus_damage", 1.5);
         int dur = cfg.getIntEffect("ice_strike_slowness_duration_ticks", 100) / 20;
-        return "Удар добавляет " + (dmg / 2.0) + " НР чистого урона и Замедление на " + dur + " сек.";
+        return "Удар добавляет " + dmg + " НР чистого урона и Замедление на " + dur + " сек.";
     }
 
     @Override
     public List<String> getExtraTooltipLines(Player player) {
         int amp = computeSlownessAmplifier(player);
         return List.of(
-                "§7Чистый урон: §c+" + (ModConfig.getInstance().getEffect("ice_strike_bonus_damage", 1.5) / 2.0) + " НР",
+                "§7Чистый урон: §c+" + ModConfig.getInstance().getEffect("ice_strike_bonus_damage", 1.5) + " НР",
                 "§7Замедление: §b" + toRoman(amp + 1)
         );
     }
@@ -62,7 +59,6 @@ public class IceStrikeAbility implements Ability {
         int duration = cfg.getIntEffect("ice_strike_slowness_duration_ticks", 100);
         int amplifier = computeSlownessAmplifier(attacker);
 
-        // 1. Наложение замедления (срабатывает всегда при ударе)
         target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, duration, amplifier, false, true));
 
         ServerLevel level = attacker.level();
@@ -70,22 +66,13 @@ public class IceStrikeAbility implements Ability {
         double y = target.getY() + (target.getBbHeight() / 2.0);
         double z = target.getZ();
 
-        // Эффект инея
-        level.sendParticles(new DustParticleOptions(0x00FFFF, 1.5f), x, y, z, 15, 0.4, 0.4, 0.4, 0.05);
-        level.sendParticles(ParticleTypes.SNOWFLAKE, x, y, z, 10, 0.3, 0.3, 0.3, 0.02);
-        level.playSound(null, x, y, z, SoundEvents.POWDER_SNOW_STEP, SoundSource.PLAYERS, 1.0f, 0.8f);
-
-        // 2. Чистый урон (раз в секунду)
         if (!data.isOnCooldown("ice_strike_cd", now)) {
             float damage = (float) cfg.getEffect("ice_strike_bonus_damage", 1.5);
             PureDamage.apply(attacker, target, damage);
             data.setCooldown("ice_strike_cd", now, 20);
 
-            // Эффект разбивания льда
-            level.sendParticles(ParticleTypes.ITEM_SNOWBALL, x, y, z, 20, 0.4, 0.4, 0.4, 0.1);
-            level.sendParticles(ParticleTypes.CRIT, x, y, z, 15, 0.3, 0.3, 0.3, 0.1);
-            level.playSound(null, x, y, z, SoundEvents.GLASS_BREAK, SoundSource.PLAYERS, 0.8f, 1.5f);
-            level.playSound(null, x, y, z, SoundEvents.AMETHYST_BLOCK_BREAK, SoundSource.PLAYERS, 0.6f, 1.8f);
+            level.sendParticles(ParticleTypes.SNOWFLAKE, x, y, z, 10, 0.3, 0.3, 0.3, 0.02);
+            level.playSound(null, x, y, z, net.minecraft.sounds.SoundEvents.PLAYER_HURT_FREEZE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
         }
     }
 

@@ -35,7 +35,7 @@ public class PorcupineQuillsAbility implements Ability {
     @Override
     public String getDescription() {
         ModConfig cfg = ModConfig.getInstance();
-        double dmg = cfg.getEffect("porcupine_active_damage", 6.0) / 2.0;
+        double dmg = cfg.getEffect("porcupine_active_damage", 6.0);
         int cd = cfg.getCooldown("porcupine_quills", 400) / 20;
         return "Наносит " + dmg + " НР чистого урона в радиусе. Перезарядка: " + cd + " сек.";
     }
@@ -54,7 +54,6 @@ public class PorcupineQuillsAbility implements Ability {
         double radPerStep = cfg.getEffect("porcupine_hardening_radius_per_step", 0.5);
         double maxSteps = cfg.getEffect("porcupine_hardening_max_steps", 4.0);
 
-        // Радиус из конфига + бонус от закалки
         double radius = cfg.getEffect("porcupine_active_radius", 5.0) + Math.min((data.porcupineHitsTaken / (double)perStep) * radPerStep, maxSteps * radPerStep);
         float damage = (float) cfg.getEffect("porcupine_active_damage", 6.0);
 
@@ -63,12 +62,9 @@ public class PorcupineQuillsAbility implements Ability {
         double y = player.getY() + 1.0;
         double z = player.getZ();
 
-        // ЭФФЕКТ: Шар из шипов во все стороны
-        // Мы используем параметры разброса (delta), чтобы заполнить сферу
         level.sendParticles(ParticleTypes.CRIT, x, y, z, 150, radius, radius, radius, 0.2);
         level.sendParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 50, radius, radius, radius, 0.1);
 
-        // Звук вылетания шипов
         level.playSound(null, x, y, z, SoundEvents.PUFFER_FISH_STING, SoundSource.PLAYERS, 1.5f, 1.0f);
         level.playSound(null, x, y, z, SoundEvents.TRIDENT_THROW, SoundSource.PLAYERS, 0.8f, 1.5f);
 
@@ -81,7 +77,7 @@ public class PorcupineQuillsAbility implements Ability {
             }
         }
 
-        player.sendOverlayMessage(Component.literal("§eШипы. §fУрон " + (damage/2.0) + " НР в радиусе " + String.format("%.1f", radius) + " блоков."));
+        player.sendOverlayMessage(Component.literal("§eШипы. §fУрон " + damage + " НР в радиусе " + String.format("%.1f", radius) + " блоков."));
         return true;
     }
 }

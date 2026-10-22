@@ -29,7 +29,7 @@ public class GluttonyHungryHunterAbility implements Ability {
 
     @Override
     public String getDescription() {
-        double dmg = ModConfig.getInstance().getEffect("gluttony_hungry_hunter_damage", 2.0) / 2.0;
+        double dmg = ModConfig.getInstance().getEffect("gluttony_hungry_hunter_damage", 2.0);
         return "По цели с Голодом III+ наносит +" + dmg + " НР чистого урона.";
     }
 
@@ -54,7 +54,6 @@ public class GluttonyHungryHunterAbility implements Ability {
             ServerPlayNetworking.send(attacker, new HudMessagePayload("§6Голодный хищник!", 0xFFFFAA00, 40));
 
             ServerLevel level = attacker.level();
-            // Эффект на враге (кровавые искры и звук укуса)
             level.sendParticles(ParticleTypes.DAMAGE_INDICATOR, target.getX(), target.getY() + 1, target.getZ(), 5, 0.2, 0.2, 0.2, 0.1);
             level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1, target.getZ(), 10, 0.3, 0.3, 0.3, 0.1);
             level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EAT, SoundSource.PLAYERS, 0.6f, 1.5f);

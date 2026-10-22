@@ -26,7 +26,7 @@ public class ArcherAbility implements Ability {
     public String getDescription() {
         ModConfig cfg = ModConfig.getInstance();
         double mult = cfg.getEffect("archer_draw_speed_multiplier", 1.5);
-        double dmg = cfg.getEffect("archer_pure_damage", 4.0) / 2.0;
+        double dmg = cfg.getEffect("archer_pure_damage", 4.0);
         return "Лук натягивается в " + mult + " раза быстрее. Полный выстрел наносит +" + dmg + " НР чистого урона.";
     }
 
@@ -39,7 +39,6 @@ public class ArcherAbility implements Ability {
     public void onPassiveTick(ServerPlayer player) {
         ServerLevel level = player.level();
 
-        // Аура скорости и лука (частицы)
         if (player.tickCount % 5 == 0) {
             double x = player.getX();
             double y = player.getY() + 1.0;
@@ -54,7 +53,6 @@ public class ArcherAbility implements Ability {
             level.sendParticles(new DustParticleOptions(0xFFFFFF, 1.0f), x, y, z, 1, 0.5, 0.2, 0.5, 0.02);
         }
 
-        // ИСПРАВЛЕНИЕ: BOW_PULL -> CROSSBOW_LOADING_MIDDLE (тихий скрип тетивы)
         ModConfig cfg = ModConfig.getInstance();
         int soundInterval = Math.max(1, cfg.getIntEffect("archer_aura_sound_interval", 20));
 

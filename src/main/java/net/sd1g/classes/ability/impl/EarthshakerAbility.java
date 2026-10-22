@@ -38,7 +38,7 @@ public class EarthshakerAbility implements Ability {
         ModConfig cfg = ModConfig.getInstance();
         int min = (int) cfg.getEffect("earthshaker_min_launch", 5.0);
         int max = (int) cfg.getEffect("earthshaker_max_launch", 10.0);
-        double dmg = cfg.getEffect("earthshaker_pure_damage", 2.0) / 2.0;
+        double dmg = cfg.getEffect("earthshaker_pure_damage", 2.0);
         int cd = getBaseCooldown() / 20;
         return "Следующий удар подбрасывает врага на " + min + "-" + max + " блоков и наносит " + dmg + " НР чистого урона. Перезарядка: " + cd + " сек.";
     }
@@ -84,11 +84,10 @@ public class EarthshakerAbility implements Ability {
 
         int launch = min + attacker.getRandom().nextInt(Math.max(1, max - min + 1));
 
-        // ИСПРАВЛЕНИЕ: Убрали hasImpulse, оставили только hurtMarked
         double upwardVelocity = launch * 0.15;
         target.setDeltaMovement(target.getDeltaMovement().x, upwardVelocity, target.getDeltaMovement().z);
         target.hurtMarked = true;
-        target.fallDistance = 0.0F; // Сбрасываем урон от падения, чтобы моб не убился об землю
+        target.fallDistance = 0.0F;
 
         PureDamage.apply(attacker, target, (float)dmg);
 
@@ -96,10 +95,6 @@ public class EarthshakerAbility implements Ability {
         double x = target.getX();
         double y = target.getY();
         double z = target.getZ();
-
-        // ==========================================
-        // ЭФФЕКТ ВЗРЫВА И РЫВКА ВВЕРХ
-        // ==========================================
 
         level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
         level.sendParticles(new DustParticleOptions(0xFF4500, 2.0f), x, y, z, 40, 0.5, 0.2, 0.5, 0.1);
