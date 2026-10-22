@@ -21,9 +21,8 @@ public class WarriorSwordDamageMixin {
         if (!"warrior".equals(PlayerClassData.get(attacker).playerClass)) return amount;
 
         if (attacker.getMainHandItem().is(ItemTags.SWORDS)) {
-            // По умолчанию +15% (1.15)
-            double mult = 1.0 + ModConfig.getInstance().getEffect("warrior_sword_damage_bonus", 0.15);
-            return (float) (amount * mult);
+            double percent = ModConfig.getInstance().get("warrior", "warrior_combat_experience.sword_bonus_percent", 15.0);
+            return (float) (amount * (1.0 + (percent / 100.0)));
         }
         return amount;
     }

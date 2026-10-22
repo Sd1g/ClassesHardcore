@@ -51,12 +51,10 @@ public class Pick3Screen extends Screen {
     private static final int ICON_SIZE = 48;
     private int itemWidth;
 
-    // Прокрутка
     private int leftScrollOffset = 0;
     private int rightScrollOffset = 0;
     private int rightMaxScroll = 0;
 
-    // Перетаскивание
     private boolean draggingLeft = false;
     private boolean draggingRight = false;
     private double dragStartY = 0;
@@ -77,10 +75,10 @@ public class Pick3Screen extends Screen {
 
     @Override
     protected void init() {
-        this.leftPanelWidth = (int) (this.width * 0.6);
+        this.leftPanelWidth = (int) (this.width * 0.5);
         this.rightPanelWidth = this.width - leftPanelWidth - PADDING * 3;
         this.rightPanelX = leftPanelWidth + PADDING * 2;
-        this.mainContentHeight = this.height - mainContentY - 40;
+        this.mainContentHeight = this.height - mainContentY - 50;
 
         this.itemWidth = leftPanelWidth - PADDING * 4;
 
@@ -93,12 +91,14 @@ public class Pick3Screen extends Screen {
         this.leftScrollOffset = 0;
         this.rightScrollOffset = 0;
 
-        int buttonY = this.height - 30;
-        int buttonWidth = (rightPanelWidth - PADDING) / 2;
+        int buttonY = this.height - 35;
+        int btnWidth = 120;
+        int gap = 10;
+        int startX = (this.width - (btnWidth * 2 + gap)) / 2;
 
         this.selectButton = new ModButton(
-                rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24,
-                Component.literal("§aПодтвердить выбор"),
+                startX + btnWidth + gap, buttonY, btnWidth, 24,
+                Component.literal("§aПодтвердить"),
                 _ -> {
                     if (selectedClass != null && !viewingCurrentClass) {
                         ClientPlayNetworking.send(new RequestClassChangePayload(3, selectedClass.id));
@@ -109,8 +109,8 @@ public class Pick3Screen extends Screen {
         this.addRenderableWidget(this.selectButton);
 
         this.cancelButton = new ModButton(
-                rightPanelX, buttonY, buttonWidth, 24,
-                Component.literal("§cВернуться назад"),
+                startX, buttonY, btnWidth, 24,
+                Component.literal("§cНазад"),
                 _ -> {
                     this.showCancelWarning = true;
                     updateWarningButtons();
@@ -125,7 +125,10 @@ public class Pick3Screen extends Screen {
         this.warningYesButton = new ModButton(
                 centerX - warnBtnWidth - 10, centerY + 30, warnBtnWidth, 20,
                 Component.literal("§cДа, выйти"),
-                _ -> this.onClose()
+                _ -> {
+                    ClientPlayNetworking.send(new RequestClassChangePayload(4, ""));
+                    this.onClose();
+                }
         );
 
         this.warningNoButton = new ModButton(
@@ -150,10 +153,13 @@ public class Pick3Screen extends Screen {
 
     private void updateCachedText() {
         if (selectedClass == null) return;
+        var player = Minecraft.getInstance().player;
         cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
         cachedAbilityLines.clear();
         for (Ability ability : selectedClass.abilities) {
-            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 42));
+            cachedAbilityLines.add(this.font.split(
+                    Component.literal(ability.getDescription(player)),
+                    rightPanelWidth - PADDING * 2 - 42));
         }
     }
 
@@ -316,8 +322,15 @@ public class Pick3Screen extends Screen {
 
         gfx.disableScissor();
 
-        int contentBottom = textY;
-        rightMaxScroll = Math.max(0, contentBottom - (mainContentY + mainContentHeight) + 10);
+        // ИСПРАВЛЕНИЕ СКРОЛЛА
+        int totalContentHeight = 48 + 15;
+        totalContentHeight += cachedDescLines.size() * 12 + 10;
+        totalContentHeight += 18;
+        for (List<FormattedCharSequence> lines : cachedAbilityLines) {
+            totalContentHeight += 26 + lines.size() * 11 + 10;
+        }
+
+        rightMaxScroll = Math.max(0, totalContentHeight - mainContentHeight + 10);
         rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
 
         drawScrollbar(gfx, rightPanelX + rightPanelWidth - 8, mainContentY, rightScrollOffset, rightMaxScroll);

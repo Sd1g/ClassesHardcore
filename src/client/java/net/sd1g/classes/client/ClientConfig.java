@@ -13,21 +13,43 @@ public class ClientConfig {
     private static final File FILE = FabricLoader.getInstance().getConfigDir()
             .resolve("classeshardcore-client.json").toFile();
 
+    public enum HudAnchor {
+        TOP_LEFT, TOP_RIGHT,
+        BOTTOM_LEFT, BOTTOM_RIGHT,
+        TOP_LEFT_HOTBAR, TOP_RIGHT_HOTBAR,
+        BOTTOM_LEFT_HOTBAR, BOTTOM_RIGHT_HOTBAR,
+        FREE
+    }
+
     public static class Data {
         public int iconSize = 24;
+        public int iconSpacing = 3;
+
+        // HUD Класса
+        public HudAnchor classAnchor = HudAnchor.BOTTOM_RIGHT_HOTBAR;
+        public int classOffsetX = 0;
+        public int classOffsetY = 0;
+
+        // HUD Пати
+        public boolean showPartyHud = true;
+        public float partyHudScale = 1.0f;
+        public HudAnchor partyAnchor = HudAnchor.TOP_LEFT;
+        public int partyOffsetX = 0;
+        public int partyOffsetY = 0;
     }
 
     private static Data INSTANCE = new Data();
 
-    public static int getIconSize() {
-        return INSTANCE.iconSize;
-    }
+    public static int getIconSize() { return INSTANCE.iconSize; }
+    public static void setIconSize(int size) { INSTANCE.iconSize = Math.max(1, Math.min(64, size)); }
 
-    public static void setIconSize(int size) {
-        int clamped = Math.max(1, Math.min(64, size));
-        INSTANCE.iconSize = clamped;
-        save();
-    }
+    public static int getIconSpacing() { return INSTANCE.iconSpacing; }
+    public static void setIconSpacing(int spacing) { INSTANCE.iconSpacing = Math.max(0, Math.min(20, spacing)); }
+
+    public static float getPartyScale() { return INSTANCE.partyHudScale; }
+    public static void setPartyScale(float scale) { INSTANCE.partyHudScale = Math.max(0.5f, Math.min(2.0f, scale)); }
+
+    public static Data getHudData() { return INSTANCE; }
 
     public static void load() {
         try {

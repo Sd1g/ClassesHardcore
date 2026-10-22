@@ -12,9 +12,17 @@ import java.util.Map;
 public class PlayerClassData {
     public String playerClass = "none";
     public Map<String, Long> abilityCooldowns = new HashMap<>();
+    public Map<String, Integer> abilityCooldownTotals = new HashMap<>();
 
     private transient ClassDefinition cachedClassDef = null;
     private transient String cachedClassDefId = null;
+
+    // --- Состояние каста ---
+    public boolean isCasting = false;
+    public int castTicksRemaining = 0;
+    public int totalCastTicks = 0;
+    public String castingAbilityId = "";
+    public double castX, castY, castZ; // Координаты для заморозки
 
     // --- Удачливый копатель ---
     public String luckyDiggerMode = "efficiency";
@@ -54,19 +62,19 @@ public class PlayerClassData {
     public int randomChangeTokens = 0;
     public int pick3ChangeTokens = 0;
 
-    // --- НОВЫЕ СЧЕТЧИКИ ДЛЯ РЕБАЛАНСА ---
+    // --- Счетчики для ребаланса ---
     public int warriorSwordKills = 0;
     public int teleporterCount = 0;
     public int porcupineHitsTaken = 0;
     public int archerBowKills = 0;
     public int dodgerDodgeCount = 0;
 
-    // --- Кристаллы Энда (Игровые тики) ---
+    // --- Кристаллы Энда ---
     public int endCrystalUses = 0;
     public long crystalCooldownEndTick = 0;
 
     // --- Реинкарнатор ---
-    public int reincarnatorTotemSaves = 0; // НОВОЕ ПОЛЕ
+    public int reincarnatorTotemSaves = 0;
 
     public static PlayerClassData get(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
@@ -110,6 +118,12 @@ public class PlayerClassData {
 
     public void setCooldown(String abilityId, long currentTick, int ticks) {
         abilityCooldowns.put(abilityId, currentTick + ticks);
+        abilityCooldownTotals.put(abilityId, ticks);
+    }
+
+    public void clearCooldowns() {
+        abilityCooldowns.clear();
+        abilityCooldownTotals.clear();
     }
 
     public CompoundTag toNbt() {
@@ -118,6 +132,10 @@ public class PlayerClassData {
         CompoundTag cdTag = new CompoundTag();
         abilityCooldowns.forEach(cdTag::putLong);
         tag.put("cooldowns", cdTag);
+        CompoundTag cdTotalTag = new CompoundTag();
+        abilityCooldownTotals.forEach(cdTotalTag::putInt);
+        tag.put("cooldown_totals", cdTotalTag);
+
         tag.putString("luckyDiggerMode", luckyDiggerMode);
         tag.putInt("luckyDiggerTotalOre", luckyDiggerTotalOre);
         tag.putInt("luckyDiggerLevel", luckyDiggerLevel);
@@ -146,10 +164,7 @@ public class PlayerClassData {
         tag.putInt("dodgerDodgeCount", dodgerDodgeCount);
         tag.putInt("endCrystalUses", endCrystalUses);
         tag.putLong("crystalCooldownEndTick", crystalCooldownEndTick);
-
-        // СОХРАНЕНИЕ НОВОГО ПОЛЯ
         tag.putInt("reincarnatorTotemSaves", reincarnatorTotemSaves);
-
         return tag;
     }
 
@@ -159,6 +174,10 @@ public class PlayerClassData {
         CompoundTag cdTag = tag.getCompoundOrEmpty("cooldowns");
         for (String key : cdTag.keySet()) {
             data.abilityCooldowns.put(key, cdTag.getLongOr(key, 0L));
+        }
+        CompoundTag cdTotalTag = tag.getCompoundOrEmpty("cooldown_totals");
+        for (String key : cdTotalTag.keySet()) {
+            data.abilityCooldownTotals.put(key, cdTotalTag.getIntOr(key, 0));
         }
         data.luckyDiggerMode = tag.getStringOr("luckyDiggerMode", "efficiency");
         data.luckyDiggerTotalOre = tag.getIntOr("luckyDiggerTotalOre", 0);
@@ -180,7 +199,6 @@ public class PlayerClassData {
         data.heroTradeBaseline = tag.getIntOr("heroTradeBaseline", 0);
         data.randomChangeTokens = tag.getIntOr("randomChangeTokens", 0);
         data.pick3ChangeTokens = tag.getIntOr("pick3ChangeTokens", 0);
-
         data.warriorSwordKills = tag.getIntOr("warriorSwordKills", 0);
         data.teleporterCount = tag.getIntOr("teleporterCount", 0);
         data.porcupineHitsTaken = tag.getIntOr("porcupineHitsTaken", 0);
@@ -188,10 +206,7 @@ public class PlayerClassData {
         data.dodgerDodgeCount = tag.getIntOr("dodgerDodgeCount", 0);
         data.endCrystalUses = tag.getIntOr("endCrystalUses", 0);
         data.crystalCooldownEndTick = tag.getLongOr("crystalCooldownEndTick", 0);
-
-        // ЗАГРУЗКА НОВОГО ПОЛЯ
         data.reincarnatorTotemSaves = tag.getIntOr("reincarnatorTotemSaves", 0);
-
         return data;
     }
 }

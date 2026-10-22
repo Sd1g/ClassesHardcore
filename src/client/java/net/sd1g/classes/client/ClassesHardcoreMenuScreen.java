@@ -45,12 +45,10 @@ public class ClassesHardcoreMenuScreen extends Screen {
     private int columns;
     private int columnWidth;
 
-    // Прокрутка
     private int leftScrollOffset = 0;
     private int rightScrollOffset = 0;
     private int rightMaxScroll = 0;
 
-    // Перетаскивание
     private boolean draggingLeft = false;
     private boolean draggingRight = false;
     private double dragStartY = 0;
@@ -65,12 +63,12 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
     @Override
     protected void init() {
-        this.leftPanelWidth = (int) (this.width * 0.6);
+        this.leftPanelWidth = (int) (this.width * 0.5);
         this.rightPanelWidth = this.width - leftPanelWidth - PADDING * 3;
         this.rightPanelX = leftPanelWidth + PADDING * 2;
-        this.mainContentHeight = this.height - mainContentY - 40;
+        this.mainContentHeight = this.height - mainContentY - 50;
 
-        this.columns = Math.max(2, Math.min(4, this.width / 350));
+        this.columns = Math.max(1, Math.min(4, this.width / 250));
         this.columnWidth = (leftPanelWidth - PADDING * 2) / columns;
 
         this.allClasses = new ArrayList<>(ClassRegistry.getAll().values());
@@ -84,27 +82,30 @@ public class ClassesHardcoreMenuScreen extends Screen {
         this.rightScrollOffset = 0;
         updateCachedText();
 
-        int buttonY = this.height - 30;
+        int buttonY = this.height - 35;
         boolean isAdmin = Minecraft.getInstance().player != null &&
                 Minecraft.getInstance().player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
 
-        int buttonWidth = isAdmin ? (rightPanelWidth - PADDING * 2) / 3 : (rightPanelWidth - PADDING) / 2;
+        int btnWidth = 120;
+        int gap = 10;
+        int totalBtnWidth = isAdmin ? (btnWidth * 3 + gap * 2) : (btnWidth * 2 + gap);
+        int startX = (this.width - totalBtnWidth) / 2;
 
         this.addRenderableWidget(new ModButton(
-                rightPanelX, buttonY, buttonWidth, 24,
+                startX, buttonY, btnWidth, 24,
                 Component.literal("§eСлучайная смена"),
                 _ -> ClientPlayNetworking.send(new RequestClassChangePayload(0, ""))
         ));
 
         this.addRenderableWidget(new ModButton(
-                rightPanelX + buttonWidth + PADDING, buttonY, buttonWidth, 24,
+                startX + btnWidth + gap, buttonY, btnWidth, 24,
                 Component.literal("§bВыбор из 3-х"),
                 _ -> ClientPlayNetworking.send(new RequestClassChangePayload(1, ""))
         ));
 
         if (isAdmin) {
             this.addRenderableWidget(new ModButton(
-                    rightPanelX + (buttonWidth + PADDING) * 2, buttonY, buttonWidth, 24,
+                    startX + (btnWidth + gap) * 2, buttonY, btnWidth, 24,
                     Component.literal("§cАдмин: Выбрать"),
                     _ -> {
                         if (selectedClass != null) {
@@ -123,10 +124,13 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
     private void updateCachedText() {
         if (selectedClass == null) return;
+        var player = Minecraft.getInstance().player;
         cachedDescLines = this.font.split(Component.literal(selectedClass.getDescription()), rightPanelWidth - PADDING * 2 - 10);
         cachedAbilityLines.clear();
         for (Ability ability : selectedClass.abilities) {
-            cachedAbilityLines.add(this.font.split(Component.literal(ability.getDescription()), rightPanelWidth - PADDING * 2 - 42));
+            cachedAbilityLines.add(this.font.split(
+                    Component.literal(ability.getDescription(player)),
+                    rightPanelWidth - PADDING * 2 - 42));
         }
     }
 
@@ -245,8 +249,15 @@ public class ClassesHardcoreMenuScreen extends Screen {
 
         gfx.disableScissor();
 
-        int contentBottom = textY;
-        rightMaxScroll = Math.max(0, contentBottom - (mainContentY + mainContentHeight) + 10);
+        // ИСПРАВЛЕНИЕ СКРОЛЛА: Высчитываем высоту контента независимо от текущего скролла
+        int totalContentHeight = 48 + 15; // иконка + отступ
+        totalContentHeight += cachedDescLines.size() * 12 + 10; // описание
+        totalContentHeight += 18; // заголовок "Способности"
+        for (List<FormattedCharSequence> lines : cachedAbilityLines) {
+            totalContentHeight += 26 + lines.size() * 11 + 10;
+        }
+
+        rightMaxScroll = Math.max(0, totalContentHeight - mainContentHeight + 10);
         rightScrollOffset = Math.max(0, Math.min(rightScrollOffset, rightMaxScroll));
 
         drawScrollbar(gfx, rightPanelX + rightPanelWidth - 8, mainContentY, rightScrollOffset, rightMaxScroll);
